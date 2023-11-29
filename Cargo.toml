@@ -1,0 +1,29 @@
+[package]
+name = "corrla_rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "corrla_rs"
+# dylib emits .so, rlib setting emits rust lib files
+crate-type = ["cdylib", "rlib"]
+path = 'src/lib.rs'
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+assert_approx_eq = "*"
+rand = "*"
+rand_distr = "*"
+num-traits = "*"
+ndarray = "*"
+nalgebra = "*"
+faer = {version = "0.15.0", features = ["ndarray"]}
+faer-core = "0.15.0"
+faer-svd = "0.15.0"
+rayon = "*"
+pyo3 = {version = "0.20", features = ["extension-module"]}
+numpy = "0.20"
+# kiddo = "3.0.0"
+kdtree = "0.7.0"
+# cudarc = { version = "*", default-features = false, optional = true, features = ["driver", "cublas", "nvrtc"] }
