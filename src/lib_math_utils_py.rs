@@ -6,6 +6,7 @@ use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
 use crate::lib_math_utils::random_svd::*;
 use crate::lib_math_utils::pca_rsvd::{PcaRsvd};
+use crate::lib_math_utils::active_subspaces::{ActiveSsRsvd, GradientEstimator};
 
 #[pymodule]
 fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
@@ -45,5 +46,29 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
         (ndarray_ev.into_pyarray(py), ndarray_pc.into_pyarray(py))
     }
+
+    #[pyfn(m)]
+    fn active_ss<'py>(py: Python<'py>, a_mat: PyReadonlyArray2<'py, f64>,
+                      y: PyReadonlyArray2<'py, f64>,
+                      order: usize, n_nbr: usize)
+        -> (&'py PyArray2<f64>, &'py PyArray2<f64>)
+    {
+        // convert numpy array into rust ndarray and
+        // convert to faer-rs matrix
+        let x = a_mat.as_array();
+        let x_mat = x.view().into_faer();
+        let fx = y.as_array();
+        let y_mat = fx.view().into_faer();
+
+        // compute active subspace directions and singular values
+        let mut act_ss = ActiveSsRsvd::new(x_mat.as_ref(), y_mat.as_ref(), order, n_nbr);
+        act_ss.fit(x_mat.as_ref());
+        let components = act_ss.components_.unwrap();
+        let singular_vals = act_ss.singular_vals_.unwrap();
+        let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
+        let ndarray_pv: Array2<f64> = singular_vals.as_ref().into_ndarray().to_owned();
+        (ndarray_pc.into_pyarray(py), ndarray_pv.into_pyarray(py))
+    }
+
     Ok(())
 }

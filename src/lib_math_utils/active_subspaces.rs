@@ -21,7 +21,7 @@ use crate::lib_math_utils::pca_rsvd::{ApplyTransform};
 
 /// Stores owned data for gradient estimation
 /// over point cloud datasets
-struct GradientEstimator {
+pub struct GradientEstimator {
     kd_tree: KdTree<f64, usize, Vec<f64>>,
     est_order: usize,
     n_nbrs: usize,
@@ -32,10 +32,10 @@ struct GradientEstimator {
 }
 
 /// Stores owned data for active subspace methods
-struct ActiveSsRsvd {
+pub struct ActiveSsRsvd {
     grad_est: GradientEstimator,
-    components_: Option<Mat<f64>>,
-    singular_vals_: Option<Mat<f64>>,
+    pub components_: Option<Mat<f64>>,
+    pub singular_vals_: Option<Mat<f64>>,
 }
 
 

@@ -1,7 +1,7 @@
 About
 ================
 
-Correlation and Random Linear Algebra in Rust
+Correlation and Random Linear Algebra methods in Rust
 
 Methods
 ---
@@ -73,6 +73,11 @@ Then in a python terminal to test:
     >>> import numpy as np
     >>> a = np.random.randn(100, 100)
     >>> corrla_rs.rsvd(a)
+    >>> x = np.random.randn(1000, 10)
+    >>> y = np.random.randn(1000, 1)
+    >>> est_order = 1
+    >>> n_neighbors = 30
+    >>> corrla_rs.active_ss(x, y, est_order, n_neighbors)
 
 
 Rust Setup
