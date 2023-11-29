@@ -45,6 +45,11 @@ To run examples
 
     cargo run --example ex1
 
+for an optimized build
+
+    cargo build --release
+    cargo test --release
+
 (Optional) Build Python Bindings
 --------------------------------
 
@@ -59,7 +64,8 @@ First install maturin in your python env:
 
 Then
 
-    cargo build && maturin develop
+    cargo build --release
+    maturin develop --release
 
 Then in a python terminal to test:
 
