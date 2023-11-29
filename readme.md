@@ -1,7 +1,7 @@
 About
 ================
 
-Corrolation and Random Linear Algebra in Rust
+Correlation and Random Linear Algebra in Rust
 
 Methods
 ---
@@ -17,7 +17,7 @@ Applied Math Methods
 - DMD by RSVD
 - POD by RSVD
 
-Corrolation Analysis Methods
+Correlation Analysis Methods
 
 - Pearson Correlation calc
 - R-squared Sensitivity analysis
