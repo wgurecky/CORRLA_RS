@@ -1,5 +1,15 @@
-import numpy as np
+"""
+RSVD benchmarks. Ex, to run benchmark with 2 threads:
 
+    OMP_NUM_THREADS=2 RAYON_NUM_THREADS=2 python benchmark_rsvd.py
+
+NOTE:
+If number of threads is not specified, both the python (numpy)
+and rust methods will try to use all available cores
+(or whatever the default OMP_NUM_THREADS is on the machine).
+This can lead to unreliable performance on hyperthreaded cpus.
+"""
+import numpy as np
 import corrla_rs as hrl
 
 
@@ -45,6 +55,9 @@ def rsvd(A, omega_rank=4, n_oversamples=4, power_iter=8):
 
 
 if __name__ == "__main__":
+    print("========= NUMPY MKL/BLAS CONFIG ========")
+    np.show_config()
+    print("========= ===================== ========")
     import time
     test_A = np.random.randn(100000, 1000)
     # test_A = np.random.randn(1000, 100000)

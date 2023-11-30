@@ -1,4 +1,5 @@
 // Impl random SVD from:
+use std::cmp;
 use faer::{prelude::*};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
 use rand::{prelude::*};
@@ -26,7 +27,8 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     let o_nrows = omega.nrows();
 
     // initial guess for y_mat is product A*omega
-    // let mut y_mat = omega;
+    // a_mat is nxm, with n >> m. omega is mxk
+    // y_mat is nxk
     let mut y_mat = a_mat * omega;
 
     let y_ncols = y_mat.ncols();
@@ -34,10 +36,11 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     // storage for matmul results
     let mut y_mat_res: Mat<T> = Mat::zeros(y_nrows, y_ncols);
     let mut o_mat_res: Mat<T> = Mat::zeros(o_nrows, o_ncols);
-    for _i in 0..n_iter {
+    for i in 0..n_iter {
         // update y_mat qr
-        // let inner_qr = y_mat.qr();
-        y_mat = y_mat.qr().compute_thin_q();
+        if i > 2 {
+            y_mat = y_mat.qr().compute_thin_q();
+        }
         // y_mat = a_mat * (a_mat.transpose() * &y_mat);
         // parallel impl of above
         par_matmul_helper(
@@ -76,8 +79,16 @@ pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_overs
     }
     // get random projection of a_mat onto my_q
     let my_q_mat = power_iter(
-        aa_mat, omega_rank + n_oversamples, n_iter);
+        aa_mat, cmp::min(omega_rank+n_oversamples, aa_mat.ncols()), n_iter);
+    // q_mat is nxk, q_mat.T is kxn  , aa_mat is nxm
+    // b mat is kxm
     let my_b_mat = my_q_mat.transpose() * aa_mat;
+    // let mut my_b_mat = faer::Mat::zeros(my_q_mat.ncols(), aa_mat.ncols());
+    // par_matmul_helper(
+    //     my_b_mat.as_mut(),
+    //     my_q_mat.transpose().as_ref(),
+    //     aa_mat.as_ref(),
+    //     T::from(1.0).unwrap(), 8);
 
     // compute svd of reduced B matrix
     let my_rsvd = my_b_mat.svd();
