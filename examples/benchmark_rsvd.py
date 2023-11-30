@@ -59,8 +59,8 @@ if __name__ == "__main__":
     np.show_config()
     print("========= ===================== ========")
     import time
-    test_A = np.random.randn(100000, 1000)
-    # test_A = np.random.randn(1000, 100000)
+    test_A = np.random.randn(100000, 10000)
+    # test_A = np.random.randn(1000, 1000000)
     ti = time.perf_counter()
     ur, sr, vr = rsvd(test_A, omega_rank=4,
                       n_oversamples=10, power_iter=8)

@@ -31,10 +31,7 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     // y_mat is nxk
     let mut y_mat = a_mat * omega;
 
-    let y_ncols = y_mat.ncols();
-    let y_nrows = y_mat.nrows();
     // storage for matmul results
-    let mut y_mat_res: Mat<T> = Mat::zeros(y_nrows, y_ncols);
     let mut o_mat_res: Mat<T> = Mat::zeros(o_nrows, o_ncols);
     for i in 0..n_iter {
         // update y_mat qr
@@ -49,11 +46,10 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
             y_mat.as_ref(), T::from(1.0).unwrap(),
             8);
         par_matmul_helper(
-            y_mat_res.as_mut(),
+            y_mat.as_mut(),
             a_mat.as_ref(),
             o_mat_res.as_ref(), T::from(1.0).unwrap(),
             8);
-        y_mat = y_mat_res.to_owned();
         // apply norm
         // y_mat = y_mat.as_ref() * faer::scale(
         //    T::from(1.).unwrap() / y_mat.norm_l2()
