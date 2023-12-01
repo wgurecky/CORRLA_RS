@@ -50,7 +50,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
     #[pyfn(m)]
     fn active_ss<'py>(py: Python<'py>, a_mat: PyReadonlyArray2<'py, f64>,
                       y: PyReadonlyArray2<'py, f64>,
-                      order: usize, n_nbr: usize)
+                      order: usize, n_nbr: usize, n_comps: usize)
         -> (&'py PyArray2<f64>, &'py PyArray2<f64>)
     {
         // convert numpy array into rust ndarray and
@@ -61,7 +61,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         let y_mat = fx.view().into_faer();
 
         // compute active subspace directions and singular values
-        let mut act_ss = ActiveSsRsvd::new(x_mat.as_ref(), y_mat.as_ref(), order, n_nbr);
+        let mut act_ss = ActiveSsRsvd::new(x_mat.as_ref(), y_mat.as_ref(), order, n_nbr, n_comps);
         act_ss.fit(x_mat.as_ref());
         let components = act_ss.components_.unwrap();
         let singular_vals = act_ss.singular_vals_.unwrap();

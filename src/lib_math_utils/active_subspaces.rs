@@ -36,6 +36,7 @@ pub struct ActiveSsRsvd {
     grad_est: GradientEstimator,
     pub components_: Option<Mat<f64>>,
     pub singular_vals_: Option<Mat<f64>>,
+    n_comps: usize,
 }
 
 
@@ -132,7 +133,7 @@ impl ActiveSsRsvd {
     /// where y is the response.
     /// First we must compute the gradients:
     /// \grad x \cdot \grad x
-    pub fn new(x_mat_in: MatRef<f64>, y_in: MatRef<f64>, order: usize, n_nbrs: usize)
+    pub fn new(x_mat_in: MatRef<f64>, y_in: MatRef<f64>, order: usize, n_nbrs: usize, n_comps: usize)
         -> Self
     {
         // let means = mat_mean(x_mat_in, 1);
@@ -147,6 +148,7 @@ impl ActiveSsRsvd {
             grad_est: GradientEstimator::new(x_mat, y, order, n_nbrs),
             components_: None,
             singular_vals_: None,
+            n_comps: n_comps,
         }
     }
 
@@ -155,30 +157,23 @@ impl ActiveSsRsvd {
     pub fn fit(&mut self, x_mat: MatRef<f64>)
     {
         let k_features = x_mat.ncols();
-//         let grad_outer_prod = (0..x_mat.nrows()).into_par_iter()
-//             .map(|i| {
-//                 let x_vec = mat_row_to_vec(x_mat.as_ref(), i);
-//                 let dy_dx = self.grad_est.est_grad(x_vec);
-//                 let tmp_outer_prod = &dy_dx.transpose() * &dy_dx;
-//                 // grad_outer_prod = grad_outer_prod + tmp_outer_prod;
-//                 tmp_outer_prod
-//             }
-//             ).reduce(|| faer::Mat::zeros(2,2), |x, y| x + y);
-        let mut grad_outer_prod: Mat<f64> = faer::Mat::zeros(k_features, k_features);
+        let mut grad_mat: Mat<f64> = faer::Mat::zeros(k_features, x_mat.nrows());
+        // Ref: P. Constantine. et. al. Active subspace methods in theory and
+        // practice. https://arxiv.org/pdf/1304.2070.pdf
+        // Eqs. 2.16 - 2.18
         for i in 0..x_mat.nrows() {
             let x_vec = mat_row_to_vec(x_mat.as_ref(), i);
             let dy_dx = self.grad_est.grad_at(x_vec);
-            let tmp_outer_prod = &dy_dx.transpose() * &dy_dx;
-            // let tmp_outer_prod = &dy_dx * &dy_dx.transpose();
-            grad_outer_prod = grad_outer_prod + tmp_outer_prod;
+            grad_mat.col_as_slice_mut(i).iter_mut().enumerate().for_each(
+                |(j, ele)| *ele = dy_dx.read(0, j));
         }
-        // compute average outer gradient product
-        let avg_grad_outer_prod = grad_outer_prod * faer::scale(1. / (x_mat.nrows() as f64));
+        let grad_mat_sc = grad_mat * faer::scale(1. / (x_mat.nrows() as f64).sqrt());
 
-        // compute svd of outer gradient product
-        let gp_svd = avg_grad_outer_prod.svd();
-        self.components_ = Some(gp_svd.u().to_owned());
-        self.singular_vals_ = Some(gp_svd.s_diagonal().to_owned());
+        // compute svd of the gradient matrix
+        let (ur, sr, _vr) = random_svd(grad_mat_sc.as_ref(),
+            cmp::min(k_features, self.n_comps), 8, 10);
+        self.components_ = Some(ur);
+        self.singular_vals_ = Some(sr);
     }
 }
 
@@ -241,7 +236,7 @@ mod active_subspace_unit_tests {
         }
 
         // initialze the active subspace estimator
-        let mut act_ss = ActiveSsRsvd::new(x_tst.as_ref(), y_tst.as_ref(), 1, 16);
+        let mut act_ss = ActiveSsRsvd::new(x_tst.as_ref(), y_tst.as_ref(), 1, 16, 2);
 
         // use same sample locations as support points to estimate the active
         // subspace
