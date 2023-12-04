@@ -179,7 +179,7 @@ impl ActiveSsRsvd {
     }
 
     /// Project a data matrix of higher dimension onto the active subspace components
-    pub fn transform(&mut self, x_mat: MatRef<f64>) -> Mat<f64>
+    pub fn transform(&self, x_mat: MatRef<f64>) -> Mat<f64>
     {
         // components are mxr, with m being k_features, and r is subspace dim
         // x_mat is nxm with n==number of samples, m is k_features
@@ -188,7 +188,7 @@ impl ActiveSsRsvd {
     }
 
     /// Project a reduced data matrix back to original space
-    pub fn inv_transform(&mut self, x_mat: MatRef<f64>) -> Mat<f64>
+    pub fn inv_transform(&self, x_mat: MatRef<f64>) -> Mat<f64>
     {
         // x_mat is nxr with n==number of samples, r is subspace components
         assert!(x_mat.ncols() == self.n_comps);
