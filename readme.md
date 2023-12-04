@@ -77,7 +77,8 @@ Then in a python terminal to test:
     >>> y = np.random.randn(1000, 1)
     >>> est_order = 1
     >>> n_neighbors = 30
-    >>> corrla_rs.active_ss(x, y, est_order, n_neighbors)
+    >>> n_comps = 8
+    >>> corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
 
 
 Rust Setup

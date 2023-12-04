@@ -6,7 +6,7 @@ use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
 use crate::lib_math_utils::random_svd::*;
 use crate::lib_math_utils::pca_rsvd::{PcaRsvd};
-use crate::lib_math_utils::active_subspaces::{ActiveSsRsvd, GradientEstimator};
+use crate::lib_math_utils::active_subspaces::{ActiveSsRsvd, PolyGradientEstimator};
 
 #[pymodule]
 fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
@@ -60,8 +60,12 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         let fx = y.as_array();
         let y_mat = fx.view().into_faer();
 
+        // init gradient estimator
+        let grad_est = PolyGradientEstimator::new(
+            x_mat, y_mat, order, n_nbr);
+
         // compute active subspace directions and singular values
-        let mut act_ss = ActiveSsRsvd::new(x_mat.as_ref(), y_mat.as_ref(), order, n_nbr, n_comps);
+        let mut act_ss = ActiveSsRsvd::new(grad_est, n_comps);
         act_ss.fit(x_mat.as_ref());
         let components = act_ss.components_.unwrap();
         let singular_vals = act_ss.singular_vals_.unwrap();

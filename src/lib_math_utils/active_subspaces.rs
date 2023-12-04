@@ -5,6 +5,7 @@
 //
 //
 use std::cmp;
+use assert_approx_eq::assert_approx_eq;
 use faer::{prelude::*, IntoFaer};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
 // use kiddo::{KdTree, SquaredEuclidean};
@@ -21,7 +22,7 @@ use crate::lib_math_utils::pca_rsvd::{ApplyTransform};
 
 /// Stores owned data for gradient estimation
 /// over point cloud datasets
-pub struct GradientEstimator {
+pub struct PolyGradientEstimator {
     kd_tree: KdTree<f64, usize, Vec<f64>>,
     est_order: usize,
     n_nbrs: usize,
@@ -31,17 +32,35 @@ pub struct GradientEstimator {
     k: usize,
 }
 
+/// Define reqired interface for gradient estimator
+pub trait GradEst {
+    fn grad_at(&self, x0: Vec<f64>) -> Mat<f64>;
+}
+
 /// Stores owned data for active subspace methods
 pub struct ActiveSsRsvd {
-    grad_est: GradientEstimator,
+    grad_est: Box<dyn GradEst>,
     pub components_: Option<Mat<f64>>,
     pub singular_vals_: Option<Mat<f64>>,
     n_comps: usize,
 }
 
+/// Interface implementation for PolyGradientEstimator
+impl GradEst for PolyGradientEstimator {
+    /// Estimate gradients [dy/dx_i, .. dy/dx_N]|_x0
+    fn grad_at(&self, x0: Vec<f64>) -> Mat<f64>
+    {
+        match self.est_order {
+            1 => self.est_grad_lin(x0),
+            2 => self.est_grad_quad(x0),
+            _ => panic!("Not implemented est order: {:?}", self.est_order)
+        }
+    }
+}
 
-impl GradientEstimator {
-    pub fn new(x_mat: Mat<f64>, y: Mat<f64>, est_order: usize, n_nbrs: usize)
+/// Polynomial gradient estimator impl
+impl PolyGradientEstimator {
+    pub fn new(x_mat: MatRef<f64>, y: MatRef<f64>, est_order: usize, n_nbrs: usize)
     -> Self
     {
         let k = x_mat.ncols();
@@ -58,8 +77,8 @@ impl GradientEstimator {
             kd_tree: kd_tree,
             est_order: est_order,
             n_nbrs: n_nbrs,
-            x_mat: x_mat,
-            y: y,
+            x_mat: x_mat.to_owned(),
+            y: y.to_owned(),
             k: k
         }
     }
@@ -87,15 +106,6 @@ impl GradientEstimator {
         let x_nbr_faer = (&x_nbr).view().into_faer();
         let y_nbr_faer = (&y_nbr).view().into_faer();
         (x_nbr_faer.to_owned(), y_nbr_faer.to_owned())
-    }
-
-    /// Estimate gradients [dy/dx0, .. dy/dxN]
-    pub fn grad_at(&self, x0: Vec<f64>) -> Mat<f64>
-    {
-        match self.est_order {
-            1 => self.est_grad_lin(x0),
-            _ => self.est_grad_quad(x0)
-        }
     }
 
     /// Estimate gradients [dy/dx0, .. dy/dxN] at x0 using linear fit
@@ -127,25 +137,17 @@ impl GradientEstimator {
     }
 }
 
-
+/// Active subspace estimator impl
 impl ActiveSsRsvd {
-    /// x_mat is a point cloud with points <x0, x1>
-    /// where y is the response.
-    /// First we must compute the gradients:
-    /// \grad x \cdot \grad x
-    pub fn new(x_mat_in: MatRef<f64>, y_in: MatRef<f64>, order: usize, n_nbrs: usize, n_comps: usize)
+    /// Init the active subspace estimator
+    pub fn new<T>(grad_est_in: T, n_comps: usize)
         -> Self
+        where
+        T: GradEst + 'static
     {
-        // let means = mat_mean(x_mat_in, 1);
-        // let n_samples = x_mat.nrows();
-        // NOTE: creates owned copies of x and y data
-        let x_mat: Mat<f64> = x_mat_in.to_owned();
-        let y: Mat<f64> = y_in.to_owned();
-
-        // build kd tree on point cloud data
         Self
         {
-            grad_est: GradientEstimator::new(x_mat, y, order, n_nbrs),
+            grad_est: Box::new(grad_est_in),
             components_: None,
             singular_vals_: None,
             n_comps: n_comps,
@@ -175,6 +177,33 @@ impl ActiveSsRsvd {
         self.components_ = Some(ur);
         self.singular_vals_ = Some(sr);
     }
+
+    /// Project a data matrix of higher dimension onto the active subspace components
+    pub fn transform(&mut self, x_mat: MatRef<f64>) -> Mat<f64>
+    {
+        // components are mxr, with m being k_features, and r is subspace dim
+        // x_mat is nxm with n==number of samples, m is k_features
+        // output is x_mat * components with nxr
+        x_mat * self.components()
+    }
+
+    /// Project a reduced data matrix back to original space
+    pub fn inv_transform(&mut self, x_mat: MatRef<f64>) -> Mat<f64>
+    {
+        // x_mat is nxr with n==number of samples, r is subspace components
+        assert!(x_mat.ncols() == self.n_comps);
+        x_mat * self.components().transpose()
+    }
+
+    /// Getter for active subspace components
+    pub fn components(self: &Self) -> &Mat<f64> {
+        self.components_.as_ref().unwrap()
+    }
+
+    /// Getter for singular_vals
+    pub fn singular_vals(self: &Self) -> &Mat<f64> {
+        self.singular_vals_.as_ref().unwrap()
+    }
 }
 
 
@@ -200,7 +229,8 @@ mod active_subspace_unit_tests {
         }
 
         // create gradient estimator
-        let grad_est = GradientEstimator::new(x_tst, y_tst, 2, 14);
+        let grad_est = PolyGradientEstimator::new(
+            x_tst.as_ref(), y_tst.as_ref(), 2, 14);
 
         // eval gradient at one location
         let eval_x_0: Vec<f64> = vec![0., 0.];
@@ -222,21 +252,28 @@ mod active_subspace_unit_tests {
     #[test]
     fn test_active_ss() {
         let tst_cov = faer::mat![
-            [0.9, 0.5],
-            [0.5, 0.9],
+            [0.9, 0.5, 0.5],
+            [0.5, 0.9, 0.5],
+            [0.5, 0.5, 0.9],
         ];
         let x_tst = sample_mv_normal(tst_cov.as_ref(), 100);
         print!("mv norm x: {:?}", x_tst);
         let mut y_tst: Mat<f64> = faer::Mat::zeros(x_tst.nrows(), 1);
-        let tst_fn = |x1: f64, x2: f64| -> f64 {0.1*x1.powf(1.) + 0.5*x2.powf(2.)};
+        let tst_fn = |x1: f64, x2: f64, x3: f64| -> f64 {0.2*x1.powf(1.) + 0.5*x2.powf(2.) + 0.0*x3};
         // evaluate the tst funciton at all samles
         for (i, sample) in x_tst.row_chunks(1).enumerate() {
-            let ys: f64 = tst_fn(sample[(0, 0)], sample[(0, 1)]);
+            let ys: f64 = tst_fn(sample[(0, 0)], sample[(0, 1)], sample[(0, 2)]);
             y_tst.write(i, 0, ys);
         }
 
-        // initialze the active subspace estimator
-        let mut act_ss = ActiveSsRsvd::new(x_tst.as_ref(), y_tst.as_ref(), 1, 16, 2);
+        // initialze the gradient estimator
+        let grad_est = PolyGradientEstimator::new(
+            x_tst.as_ref(), y_tst.as_ref(), 2, 14);
+
+        // initialze the active subspace estimator, supplying a
+        // valid gradient estimator as input to init
+        let n_comps = 2;
+        let mut act_ss = ActiveSsRsvd::new(grad_est, n_comps);
 
         // use same sample locations as support points to estimate the active
         // subspace
@@ -245,5 +282,24 @@ mod active_subspace_unit_tests {
         print!("\n Active subspace component directions:\n {:?}\n", act_ss.components_);
         // print the active subspace singular values
         print!("\n Active subspace singular vals:\n {:?}\n", act_ss.singular_vals_);
+        // Known higher gradient variability along x2 so first active component should be
+        // dominated by the x2 direction.
+        assert!(act_ss.components().read(0, 0).abs() < act_ss.components().read(1, 0).abs());
+        assert!(act_ss.singular_vals().read(0, 0) > act_ss.singular_vals().read(1, 0));
+
+        // check the grad estimator
+        let eval_x_0: Vec<f64> = vec![0., 1., 0.];
+        let grad_y_0 = act_ss.grad_est.grad_at(eval_x_0);
+        print!("at x=[0., 1., 0.], est grad= {:?} \n", grad_y_0);
+        mat_mat_approx_eq(grad_y_0.as_ref(), mat![[0.2, 1., 0.]].as_ref(), 1.0e-1f64);
+
+        // project the original sample locations into 2D active subspace
+        let tr_x_tst = act_ss.transform(x_tst.as_ref());
+        assert!(tr_x_tst.ncols() == 2);
+        let tr_inv_x_tst = act_ss.inv_transform(tr_x_tst.as_ref());
+        assert!(tr_inv_x_tst.ncols() == 3);
+        // ensure the points mapped back to their original positions
+        assert_approx_eq!(tr_inv_x_tst.read(0, 0), x_tst.read(0, 0));
+        assert_approx_eq!(tr_inv_x_tst.read(0, 1), x_tst.read(0, 1));
     }
 }
