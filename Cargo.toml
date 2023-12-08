@@ -18,9 +18,9 @@ rand_distr = "*"
 num-traits = "*"
 ndarray = "*"
 nalgebra = "*"
-faer = {version = "0.15.0", features = ["ndarray"]}
-faer-core = "0.15.0"
-faer-svd = "0.15.0"
+faer = {version = "0.16.0", features = ["ndarray"]}
+faer-core = "0.16.0"
+faer-svd = "0.16.0"
 rayon = "*"
 pyo3 = {version = "0.20", features = ["extension-module"]}
 numpy = "0.20"
