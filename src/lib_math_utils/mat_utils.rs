@@ -402,7 +402,7 @@ pub fn mat_scale_approx_eq<T>(a: MatRef<T>, b: T, tol: T)
 }
 
 
-// Stack two matrix together
+// Stack two matrix together, horizontally
 pub fn mat_hstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
     where
     T: faer_core::RealField + Float
@@ -419,6 +419,30 @@ pub fn mat_hstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
             }
             else {
                 o_mat.write(i, j, b.read(i, j - col_offset));
+            }
+        }
+    }
+    o_mat
+}
+
+
+// Stack two matrix together, vertically
+pub fn mat_vstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    assert!(a.ncols() == b.ncols());
+    let o_nrows = a.nrows() + b.nrows();
+    let o_ncols = a.ncols();
+    let row_offset = a.nrows();
+    let mut o_mat: faer::Mat<T> = faer::Mat::zeros(o_nrows, o_ncols);
+    for i in 0..o_nrows {
+        for j in 0..o_ncols {
+            if i < a.nrows() {
+                o_mat.write(i, j, a.read(i, j));
+            }
+            else {
+                o_mat.write(i, j, b.read(i - row_offset, j));
             }
         }
     }
@@ -571,6 +595,27 @@ mod mat_utils_unit_tests {
             [0.0, 1.0, 2.0],
             [0.0, 1.0, 2.0],];
         mat_mat_approx_eq(hstacked.as_ref(), expected.as_ref(), 1.0e-12f64);
+    }
+
+    #[test]
+    fn test_vstack() {
+        let a_tst = faer::mat![
+            [0.0, 1.0],
+            [0.0, 1.0],
+            [0.0, 1.0],
+            [0.0, 1.0],];
+        let b_tst = faer::mat![
+            [2.0, 3.0],
+            ];
+        let vstacked = mat_vstack(a_tst.as_ref(), b_tst.as_ref());
+        print!("c hstck: {:?}", vstacked);
+        let expected = faer::mat![
+            [0.0, 1.0],
+            [0.0, 1.0],
+            [0.0, 1.0],
+            [0.0, 1.0],
+            [2.0, 3.0],];
+        mat_mat_approx_eq(vstacked.as_ref(), expected.as_ref(), 1.0e-12f64);
     }
 
     #[test]
