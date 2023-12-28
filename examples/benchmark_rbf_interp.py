@@ -7,8 +7,8 @@ def main():
     # create 2d function to interpolate
     f_xx = lambda x1, x2: np.sin(x1) + np.sin(x2)
     # eval fn at random points
-    x1 = np.random.uniform(-np.pi, np.pi, 50)
-    x2 = np.random.uniform(-np.pi, np.pi, 50)
+    x1 = np.random.uniform(-np.pi, np.pi, 10)
+    x2 = np.random.uniform(-np.pi, np.pi, 10)
     xx1, xx2 = np.meshgrid(x1, x2)
     y_xx = f_xx(xx1.flatten(), xx2.flatten())
 
