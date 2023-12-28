@@ -37,8 +37,16 @@ fn rbf_kernel_lin(r_dist: f64) -> f64 {
     r_dist
 }
 
+fn rbf_kernel_multiquad(r_dist: f64, eps: f64) -> f64 {
+    (1.0 + (eps * r_dist).powf(2.0)).sqrt()
+}
+
 fn rbf_kernel_cubic(r_dist: f64) -> f64 {
     r_dist * r_dist * r_dist
+}
+
+fn rbf_kernel_gauss(r_dist: f64, eps: f64) -> f64 {
+    (-1.0*(r_dist*eps).powf(2.0)).exp()
 }
 
 impl RbfInterp {
@@ -72,10 +80,10 @@ impl RbfInterp {
 
     // builds vandermonde matrix
     fn _buildP(&self, x_in: MatRef<f64>) -> Mat<f64> {
-        build_vandermonde(build_xpowers(x_in, self.poly_degree).as_ref(), false)
+        build_full_vandermonde(x_in.as_ref(), self.poly_degree)
     }
 
-    fn _buildKP(&self, x_in: MatRef<f64>) -> Mat<f64> {
+    fn _buildKP(&self, x_in: MatRef<f64>, full: bool) -> Mat<f64> {
         let matK = self._buildK(x_in);
         let matP = self._buildP(x_in);
         let mat_upper = mat_hstack(matK.as_ref(), matP.as_ref());
@@ -84,13 +92,13 @@ impl RbfInterp {
         let matB = faer::Mat::zeros(matP.transpose().nrows(), matP.ncols());
         let mat_lower = mat_hstack(matP.transpose(), matB.as_ref());
 
-        print!("mat lower: {:?}, {:?} \n", mat_lower.nrows(), mat_lower.ncols());
-        print!("mat upper: {:?}, {:?} \n", mat_upper.nrows(), mat_upper.ncols());
-        print!("mat Kdims: {:?}, {:?} \n", matK.nrows(), matK.ncols());
-        print!("mat Pdims: {:?}, {:?} \n", matP.nrows(), matP.ncols());
-        print!("mat Bdims: {:?}, {:?} \n", matB.nrows(), matB.ncols());
-        // stack upper and lower blocks together
-        mat_vstack(mat_upper.as_ref(), mat_lower.as_ref())
+        if full {
+            // stack upper and lower blocks together
+            mat_vstack(mat_upper.as_ref(), mat_lower.as_ref())
+        }
+        else {
+            mat_upper
+        }
     }
 
     pub fn fit(&mut self, x_in: MatRef<f64>, y_in: MatRef<f64>)
@@ -98,15 +106,13 @@ impl RbfInterp {
         assert_eq!(self.rbf_dim, x_in.ncols());
         self.x_known = Some(x_in.to_owned());
         // build block matrix
-        let matKP = self._buildKP(x_in);
+        let matKP = self._buildKP(x_in, true);
         // solve for interpolating coeffs
         let matKP_inv = mat_pinv(matKP.as_ref());
         let tot_size = matKP_inv.ncols();
         let y_pad = faer::Mat::zeros(tot_size-y_in.nrows(), 1);
 
         let coeffs = matKP_inv * mat_vstack(y_in.as_ref(), y_pad.as_ref());
-        print!("coeffs: {:?}", coeffs);
-        print!("n coeffs: {:?} \n ", coeffs.nrows());
         self.coeffs = Some(coeffs);
     }
 
@@ -114,8 +120,7 @@ impl RbfInterp {
         -> Mat<f64>
     {
         assert_eq!(self.rbf_dim, x_query.ncols());
-        let test_matKP = self._buildKP(x_query);
-        print!("n test_matKP: {:?} \n ", test_matKP.ncols());
+        let test_matKP = self._buildKP(x_query, false);
         let o_mat = test_matKP * self.coeffs.as_ref().unwrap();
         o_mat
     }
@@ -142,7 +147,7 @@ mod interp_utils_unit_tests {
             y_tst.write(i, 0, ys);
         }
         // build the rbf interpolant
-        let mut rbf_interp_f = RbfInterp::new(2, 3, 1, 0);
+        let mut rbf_interp_f = RbfInterp::new(2, 3, 2, 0);
         rbf_interp_f.fit(x_tst.as_ref(), y_tst.as_ref());
         let x_eval = sample_mv_normal(tst_cov.as_ref(), 10);
         let y_eval = rbf_interp_f.predict(x_eval.as_ref());
