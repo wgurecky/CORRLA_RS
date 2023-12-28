@@ -1,9 +1,11 @@
 use numpy::ndarray::{Array1, Array2, ArrayD, ArrayView1, ArrayViewD, ArrayViewMutD, Zip};
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2, PyArrayDyn, PyReadonlyArrayDyn};
-use pyo3::{exceptions::PyRuntimeError, pymodule, types::PyModule, PyResult, Python};
+use pyo3::{exceptions::PyRuntimeError, pyclass, pymodule, types::PyModule, PyResult, Python};
+use pyo3::prelude::*;
 
 use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
+use crate::lib_math_utils::interp_utils::*;
 use crate::lib_math_utils::random_svd::*;
 use crate::lib_math_utils::pca_rsvd::{PcaRsvd};
 use crate::lib_math_utils::active_subspaces::{ActiveSsRsvd, PolyGradientEstimator};
@@ -40,11 +42,12 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
 
         // Compute PCA
         let my_pca = PcaRsvd::new(y.as_ref(), n_rank);
-        let expl_var = my_pca.explained_var();
+        // let expl_var = my_pca.explained_var();
         let components = my_pca.components();
-        let ndarray_ev: Array2<f64> = expl_var.as_ref().into_ndarray().to_owned();
+        let singular_vals = my_pca.singular_values();
+        let ndarray_sv: Array2<f64> = singular_vals.as_ref().into_ndarray().to_owned();
         let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
-        (ndarray_ev.into_pyarray(py), ndarray_pc.into_pyarray(py))
+        (ndarray_sv.into_pyarray(py), ndarray_pc.into_pyarray(py))
     }
 
     #[pyfn(m)]
@@ -74,5 +77,52 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         (ndarray_pc.into_pyarray(py), ndarray_pv.into_pyarray(py))
     }
 
+    // Add classes to module
+    m.add_class::<PyRbfInterp>()?;
+
     Ok(())
+}
+
+/// Python interface for rust RBF Interp impl
+#[pyclass(unsendable)]
+pub struct PyRbfInterp {
+    pub rbfi: RbfInterp,
+}
+
+#[pymethods]
+impl PyRbfInterp {
+    #[new]
+    pub fn new(kernel_type: usize, kernel_param: f64, dim: usize, poly_degree: usize) -> Self {
+        let rbf_kern: Box<dyn RbfEval> = match kernel_type {
+            1 => { Box::new(RbfKernelLin::new()) },
+            2 => { Box::new(RbfKernelMultiQuad::new(kernel_param)) },
+            3 => { Box::new(RbfKernelCubic::new()) },
+            _ => { Box::new(RbfKernelGauss::new(kernel_param)) },
+        };
+        let rbf_interp_f = RbfInterp::new(rbf_kern, dim, poly_degree);
+        Self {
+            rbfi: rbf_interp_f,
+        }
+    }
+
+    pub fn fit(&mut self, x_np: PyReadonlyArray2<f64>, y_np: PyReadonlyArray2<f64>) {
+        // convert numpy array into rust ndarray and
+        // convert to faer-rs matrix
+        let x = x_np.as_array();
+        let x_mat = x.view().into_faer();
+        let y = y_np.as_array();
+        let y_mat = y.view().into_faer();
+        // fit the RBF interpolant
+        self.rbfi.fit(x_mat.as_ref(), y_mat.as_ref());
+    }
+
+    pub fn predict(&self, py: Python<'_>, x_np: PyReadonlyArray2<f64>)
+        -> Py<PyArray2<f64>>
+    {
+        let x = x_np.as_array();
+        let x_mat = x.view().into_faer();
+        let y_eval = self.rbfi.predict(x_mat.as_ref());
+        let ndarray_y: Array2<f64> = y_eval.as_ref().into_ndarray().to_owned();
+        ndarray_y.into_pyarray(py).to_owned()
+    }
 }

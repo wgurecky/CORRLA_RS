@@ -19,48 +19,80 @@ pub struct RbfInterp {
     // locations of known support points.
     // Used to compute distance between query points and known points.
     x_known: Option<Mat<f64>>,
-    // Only needed if n_nearest > 0 to perform refit of weights for each
-    // query point (expensive)
-    y_known: Option<Mat<f64>>,
-    // number of nearest neighbors to use when interpolating
-    n_nearest: usize,
     // degree of augmenting polynomial
     poly_degree: usize,
-    // kernel type.  1==linear, 2==multiquadratic, 3==cubic
-    // 0==gauss, 5==thin plate
-    kernel_type: usize,
+    // kernel type
+    kernel: Box<dyn RbfEval>,
     // interpolating coeffs
     coeffs: Option<Mat<f64>>,
 }
 
-fn rbf_kernel_lin(r_dist: f64) -> f64 {
-    r_dist
+/// Define required interface for RBF kernel
+pub trait RbfEval {
+    fn rbf_eval(&self, r_dist: f64) -> f64;
 }
 
-fn rbf_kernel_multiquad(r_dist: f64, eps: f64) -> f64 {
-    (1.0 + (eps * r_dist).powf(2.0)).sqrt()
+/// Linear rbf kernel
+pub struct RbfKernelLin {}
+impl RbfKernelLin {
+    pub fn new() -> Self {
+        RbfKernelLin {}
+    }
+}
+impl RbfEval for RbfKernelLin {
+    fn rbf_eval(&self, r_dist: f64) -> f64 {
+        r_dist
+    }
 }
 
-fn rbf_kernel_cubic(r_dist: f64) -> f64 {
-    r_dist * r_dist * r_dist
+/// Cubic rbf kernel
+pub struct RbfKernelCubic {}
+impl RbfKernelCubic {
+    pub fn new() -> Self {
+        RbfKernelCubic {}
+    }
+}
+impl RbfEval for RbfKernelCubic {
+    fn rbf_eval(&self, r_dist: f64) -> f64 {
+        r_dist * r_dist * r_dist
+    }
 }
 
-fn rbf_kernel_gauss(r_dist: f64, eps: f64) -> f64 {
-    (-1.0*(r_dist*eps).powf(2.0)).exp()
+/// Multi quadratic rbf kernel
+pub struct RbfKernelMultiQuad {eps: f64,}
+impl RbfKernelMultiQuad {
+    pub fn new(eps_in: f64) -> Self {
+        RbfKernelMultiQuad { eps: eps_in }
+    }
+}
+impl RbfEval for RbfKernelMultiQuad {
+    fn rbf_eval(&self, r_dist: f64) -> f64 {
+        (1.0 + (self.eps * r_dist).powf(2.0)).sqrt()
+    }
+}
+
+/// Gaussian rbf kernel
+pub struct RbfKernelGauss {eps: f64,}
+impl RbfKernelGauss {
+    pub fn new(eps_in: f64) -> Self {
+        RbfKernelGauss { eps: eps_in }
+    }
+}
+impl RbfEval for RbfKernelGauss {
+    fn rbf_eval(&self, r_dist: f64) -> f64 {
+        (-1.0*(r_dist*self.eps).powf(2.0)).exp()
+    }
 }
 
 impl RbfInterp {
-    pub fn new(dim: usize, kernel_id: usize,
-               poly_degree: usize, n_nearest: usize)
+    pub fn new(kernel: Box<dyn RbfEval>, dim: usize, poly_degree: usize)
         -> Self
         {
             RbfInterp {
                 rbf_dim: dim,
                 x_known: None,
-                y_known: None,
-                n_nearest: n_nearest,
                 poly_degree: poly_degree,
-                kernel_type: kernel_id,
+                kernel: kernel,
                 coeffs: None,
             }
         }
@@ -71,7 +103,7 @@ impl RbfInterp {
         for (i, row_a) in x_in.row_chunks(1).enumerate() {
             for (j, row_b) in self.x_known.as_ref().unwrap().row_chunks(1).enumerate() {
                 let r_dist = (row_a - row_b).norm_l2();
-                let rbf_phi = rbf_kernel_cubic(r_dist);
+                let rbf_phi = self.kernel.rbf_eval(r_dist);
                 o_mat.write(i, j, rbf_phi);
             }
         }
@@ -147,7 +179,8 @@ mod interp_utils_unit_tests {
             y_tst.write(i, 0, ys);
         }
         // build the rbf interpolant
-        let mut rbf_interp_f = RbfInterp::new(2, 3, 2, 0);
+        let rbf_kern = RbfKernelMultiQuad::new(1.0);
+        let mut rbf_interp_f = RbfInterp::new(Box::new(rbf_kern), 2, 1);
         rbf_interp_f.fit(x_tst.as_ref(), y_tst.as_ref());
         let x_eval = sample_mv_normal(tst_cov.as_ref(), 10);
         let y_eval = rbf_interp_f.predict(x_eval.as_ref());
