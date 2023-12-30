@@ -62,7 +62,7 @@ impl PcaRsvd {
         let n_dim = x_mat.ncols();
         let cx_mat = center_mat_col(x_mat.as_ref());
         // compute svd of centered x_mat
-        let (ur, sr, vr) = random_svd(
+        let (_ur, sr, vr) = random_svd(
             cx_mat.as_ref(), rank, 20, cmp::min(n_dim, 10));
         // the singular values
         let pca_s = sr;
@@ -82,9 +82,9 @@ impl PcaRsvd {
     }
 
     /// Updates the pca_basis and pca_weights
-    pub fn fit(&mut self, x_mat: MatRef<f64>, rank: usize) -> Self
+    pub fn fit(&mut self, x_mat: MatRef<f64>, rank: usize)
     {
-        Self::new(x_mat, rank)
+        *self = Self::new(x_mat, rank)
     }
 
     /// explained varience per component

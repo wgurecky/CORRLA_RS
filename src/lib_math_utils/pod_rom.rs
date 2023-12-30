@@ -140,7 +140,7 @@ mod pod_unit_tests {
             let tmp_vec: Vec<_> = x_points.col_as_slice(0).into_iter().map(
                 |x| { (0.5 * t) * (-(x-t).powf(2.0) / sigma.powf(2.0)).exp() }
             ).collect();
-            let tmp_mat = mat_from_vec(tmp_vec);
+            let tmp_mat = mat_from_vec(&tmp_vec);
             mat_set_col(p_snapshots.as_mut(), n, tmp_mat.as_ref());
         }
         p_snapshots = p_snapshots.transpose().to_owned();
