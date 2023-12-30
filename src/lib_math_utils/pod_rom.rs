@@ -9,6 +9,7 @@
 /// the CFD data to obtain an estimated pressure field at any attack angle.
 use faer::{prelude::*};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use num_traits::Float;
 
 // internal imports
 use crate::lib_math_utils::mat_utils::*;
@@ -33,11 +34,11 @@ pub struct PodI {
 }
 
 impl PodI {
-    pub fn new(&self, x_data: MatRef<f64>, t: MatRef<f64>, n_modes: usize) -> Self {
+    pub fn new(x_data: MatRef<f64>, t: MatRef<f64>, n_modes: usize) -> Self {
         assert_eq!(t.nrows(), x_data.nrows());
-        let modes = self._modes(x_data, n_modes);
-        let weights = self._weights(modes.as_ref(), x_data, n_modes);
-        let interp_f = self._mode_interp(t, weights.as_ref());
+        let modes = Self::_modes(x_data, n_modes);
+        let weights = Self::_weights(modes.as_ref(), x_data, n_modes);
+        let interp_f = Self::_mode_interp(t, weights.as_ref());
         PodI {
             n_snapshots: x_data.nrows(),
             t_abscissa: t.to_owned(),
@@ -49,7 +50,7 @@ impl PodI {
     }
 
     /// Computes POD modes by RSVD
-    fn _modes(&self, x_data: MatRef<f64>, n_modes: usize)
+    fn _modes(x_data: MatRef<f64>, n_modes: usize)
         -> Mat<f64>
     {
         let (_u, _s, v) = random_svd(x_data, n_modes, 10, 10);
@@ -57,7 +58,7 @@ impl PodI {
     }
 
     /// Computes POD mode weights by least squares
-    fn _weights(&self, modes: MatRef<f64>, x_data: MatRef<f64>, n_modes: usize)
+    fn _weights(modes: MatRef<f64>, x_data: MatRef<f64>, n_modes: usize)
         -> Mat<f64>
     {
         let modes_inv = mat_pinv(modes);
@@ -74,7 +75,7 @@ impl PodI {
     }
 
     /// Constructs POD mode weights interpolants
-    fn _mode_interp(&self, t: MatRef<f64>, weights: MatRef<f64>)
+    fn _mode_interp(t: MatRef<f64>, weights: MatRef<f64>)
         -> Vec<RbfInterp>
     {
         assert_eq!(t.nrows(), weights.nrows());
@@ -96,7 +97,7 @@ impl PodI {
     /// Refit the POD model
     pub fn fit(&mut self, x_data: MatRef<f64>, t: MatRef<f64>, n_modes: usize)
     {
-        *self = self.new(x_data, t, n_modes)
+        *self = Self::new(x_data, t, n_modes)
     }
 
     /// Predict at point, t
@@ -117,18 +118,6 @@ impl PodI {
     }
 }
 
-fn mat_linspace(start: f64, end: f64, n_steps: usize) -> Mat<f64>
-{
-    let mut o_mat = faer::Mat::zeros(1, n_steps);
-    let tot = end - start;
-    let delta = tot / (n_steps as f64);
-    o_mat[(0, 0)] = start;
-    for i in 1..n_steps {
-        o_mat[(0, i)] = o_mat[(0, i-1)] + delta
-    }
-    o_mat
-}
-
 
 #[cfg(test)]
 mod pod_unit_tests {
@@ -139,7 +128,29 @@ mod pod_unit_tests {
     fn test_pod() {
         // build pressure field snapshots
         let sigma = 0.25f64;
-        let t_points = mat_linspace(0.0, 10.0, 100);
-        t_points.col_as_slice(0).into_iter().map(|t| (0.5 * t) * ((1.0 - t) / sigma).exp()).collect();
+        let nx = 100;
+        let x_points = mat_linspace::<f64>(0.0, 10.0, nx);
+        let n_snapshots = 20;
+        let t_points = mat_linspace::<f64>(1.0, 9.0, n_snapshots);
+
+        let mut p_snapshots: Mat<f64> = faer::Mat::zeros(nx, n_snapshots);
+
+        for n in 0..n_snapshots {
+            let t = t_points[(n, 0)];
+            let tmp_vec: Vec<_> = x_points.col_as_slice(0).into_iter().map(
+                |x| { (0.5 * t) * (-(x-t).powf(2.0) / sigma.powf(2.0)).exp() }
+            ).collect();
+            let tmp_mat = mat_from_vec(tmp_vec);
+            mat_set_col(p_snapshots.as_mut(), n, tmp_mat.as_ref());
+        }
+        p_snapshots = p_snapshots.transpose().to_owned();
+
+        // Compute POD modes
+        let pod = PodI::new(p_snapshots.as_ref(), t_points.as_ref(), 4);
+
+        // predict pressure at t=5.2
+        let t_tst = faer::mat![[5.2,]];
+        let pred_p = pod.predict(t_tst.as_ref());
+        print!("Predicted P: {:?}", pred_p);
     }
 }
