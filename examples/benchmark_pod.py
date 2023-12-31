@@ -138,7 +138,7 @@ def example_pod(n_pod_modes=4):
     # spatial grid (could by 3D, but here is 1D)
     # note: if 2D or 3D field data, ensure to flatten data arrays
     # before applying POD.
-    grid_x = np.linspace(0., 10., 50)
+    grid_x = np.linspace(0., 10., 5000)
     # test pressure profiles, dependant var snapshot storage
     test_p_snaps = []
     test_p_t = []
@@ -210,6 +210,16 @@ def example_pod(n_pod_modes=4):
     corrla_p_test = corrla_pod.predict(u_test.reshape((1, 1)))
     tf = time.time()
     print("Rust POD predict time: %0.2e (s)" % (tf-ti))
+
+    plt.figure()
+    plt.plot(grid_x, py_p_test.flatten(), label="Python")
+    plt.plot(grid_x, corrla_p_test.flatten(), ls="--", label="Rust Corrla")
+    plt.legend()
+    plt.ylabel("Pressure [arbitrary scale]")
+    plt.xlabel("Space [m]")
+    plt.grid(ls="--")
+    plt.savefig("pod_example_pred_rs_py.png")
+    plt.close()
 
 if __name__ == "__main__":
     example_pod()
