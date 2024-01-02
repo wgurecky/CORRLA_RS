@@ -17,7 +17,7 @@ use rand_distr::Dirichlet;
 ///     * `chunk_size` - number of samples per shot
 ///     * `c_scale` - sum constraint
 pub fn constr_dirichlet_sample(
-    bounds: &Array2<f64>,
+    bounds: ArrayView2<f64>,
     n_samples: usize,
     max_zshots: usize,
     chunk_size: usize,
@@ -81,7 +81,7 @@ mod space_samplers_unit_tests {
              ]);
 
         let n_samples = 10;
-        let samples = constr_dirichlet_sample(&bounds, n_samples, 500, 50000, 1.0);
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 50000, 1.0);
         print!("Samples: {:?}", samples);
         assert_eq!(samples.nrows(), n_samples);
         for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {

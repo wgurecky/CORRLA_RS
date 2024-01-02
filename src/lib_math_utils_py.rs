@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 
 use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
+use crate::lib_math_utils::space_samplers::*;
 use crate::lib_math_utils::pod_rom::*;
 use crate::lib_math_utils::interp_utils::*;
 use crate::lib_math_utils::random_svd::*;
@@ -76,6 +77,22 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
         let ndarray_pv: Array2<f64> = singular_vals.as_ref().into_ndarray().to_owned();
         (ndarray_pc.into_pyarray(py), ndarray_pv.into_pyarray(py))
+    }
+
+    #[pyfn(m)]
+    fn cs_dirichlet_sample<'py>(py: Python<'py>,
+        np_bounds: PyReadonlyArray2<'py, f64>,
+        n_samples: usize,
+        max_zshots: usize,
+        chunk_size: usize,
+        c_scale: f64,
+        ) -> &'py PyArray2<f64>
+    {
+        let bounds = np_bounds.as_array();
+        let samples = constr_dirichlet_sample(
+            bounds, n_samples, max_zshots, chunk_size, c_scale);
+        let ndarray_samples = samples.to_owned();
+        ndarray_samples.into_pyarray(py)
     }
 
     // Add classes to module
