@@ -1,11 +1,6 @@
 /// Interpolation utility methods
-use num_traits::Float;
 use faer::{prelude::*, IntoNdarray};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
-use rand::{prelude::*};
-use rand_distr::{StandardNormal, Uniform};
-use rayon::prelude::*;
-use ndarray::prelude::*;
 
 // internal imports
 use crate::lib_math_utils::mat_utils::*;

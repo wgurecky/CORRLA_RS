@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 
 use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
+use crate::lib_math_utils::pod_rom::*;
 use crate::lib_math_utils::interp_utils::*;
 use crate::lib_math_utils::random_svd::*;
 use crate::lib_math_utils::pca_rsvd::{PcaRsvd};
@@ -79,6 +80,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
 
     // Add classes to module
     m.add_class::<PyRbfInterp>()?;
+    m.add_class::<PyPodI>()?;
 
     Ok(())
 }
@@ -122,6 +124,36 @@ impl PyRbfInterp {
         let x = x_np.as_array();
         let x_mat = x.view().into_faer();
         let y_eval = self.rbfi.predict(x_mat.as_ref());
+        let ndarray_y: Array2<f64> = y_eval.as_ref().into_ndarray().to_owned();
+        ndarray_y.into_pyarray(py).to_owned()
+    }
+}
+
+/// Python interface for rust POD Interp impl
+#[pyclass(unsendable)]
+pub struct PyPodI {
+    pub pod: PodI,
+}
+
+#[pymethods]
+impl PyPodI {
+    #[new]
+    pub fn new(x_np: PyReadonlyArray2<f64>, t_np: PyReadonlyArray2<f64>, n_modes: usize) -> Self
+    {
+        let x = x_np.as_array();
+        let x_mat = x.view().into_faer();
+        let t = t_np.as_array();
+        let t_mat = t.view().into_faer();
+        PyPodI {
+            pod: PodI::new(x_mat.as_ref(), t_mat.as_ref(), n_modes),
+        }
+    }
+
+    pub fn predict(&self, py:Python<'_>, t_np: PyReadonlyArray2<f64>) -> Py<PyArray2<f64>>
+    {
+        let t = t_np.as_array();
+        let t_mat = t.view().into_faer();
+        let y_eval = self.pod.predict(t_mat.as_ref());
         let ndarray_y: Array2<f64> = y_eval.as_ref().into_ndarray().to_owned();
         ndarray_y.into_pyarray(py).to_owned()
     }

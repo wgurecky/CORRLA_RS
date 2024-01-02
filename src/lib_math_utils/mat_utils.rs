@@ -449,6 +449,42 @@ pub fn mat_vstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
     o_mat
 }
 
+/// Produces a single column vector of elements evenly spaced
+pub fn mat_linspace<T>(start: T, end: T, n_steps: usize) -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut o_mat = faer::Mat::zeros(n_steps, 1);
+    let delta = (end - start) / (T::from(n_steps).unwrap());
+    for i in 0..n_steps {
+        o_mat.write(i, 0, T::from(i).unwrap()*delta);
+    }
+    o_mat
+}
+
+/// Set a column inside input matrix to values in col_mat
+/// Modifies the input matrix in-place
+pub fn mat_set_col<T>(mut a_mat: MatMut<T>, col: usize, col_mat: MatRef<T>)
+    where
+    T: faer_core::RealField + Float
+{
+    for i in 0..col_mat.nrows() {
+        a_mat.write(i, col, col_mat.read(i, 0) );
+    }
+}
+
+/// Converts a rust Vec into a faer Mat.  Done by a data copy (can be expensive)
+pub fn mat_from_vec<T>(in_vec: &Vec<T>) -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut o_mat: Mat<T> = faer::Mat::zeros(in_vec.len(), 1);
+    for (i, ele) in in_vec.into_iter().enumerate() {
+        o_mat.write(i, 0, *ele);
+    }
+    o_mat
+}
+
 
 #[cfg(test)]
 mod mat_utils_unit_tests {
