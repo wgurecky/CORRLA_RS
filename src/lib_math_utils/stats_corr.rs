@@ -168,6 +168,35 @@ pub fn jac_from_lin(x: MatRef<f64>, y: MatRef<f64>) -> Mat<f64>
     lin_coeffs
 }
 
+/// build a matrix with colums of powers of original maxtrix colums
+/// up to degree max_degree
+pub fn mat_col_powers(x: MatRef<f64>, max_degree: usize) -> Mat<f64> {
+    let mut x_out = x.to_owned();
+    for deg in 2..max_degree+1 {
+        let x_new = mat_ele_pow(x, deg as f64);
+        x_out = mat_hstack(x_out.as_ref(), x_new.as_ref());
+    }
+    x_out
+}
+
+/// Build full vandermonde matrix
+pub fn build_full_vandermonde(x: MatRef<f64>, degree: usize) -> Mat<f64>
+{
+    if degree < 2 {
+        let mut ones_col = faer::Mat::zeros(x.nrows(), 1);
+        ones_col.fill(1.0);
+        let vand_a = mat_hstack(x, ones_col.as_ref());
+        vand_a
+    }
+    else {
+        let xv = build_vandermonde(x, true);
+        //for _deg in 2..degree {
+        //    xv = build_vandermonde(xv.as_ref(), false);
+        //}
+        xv
+    }
+}
+
 /// Build vandermonde matrix
 pub fn build_vandermonde(x: MatRef<f64>, include_self_interactions: bool) -> Mat<f64>
 {

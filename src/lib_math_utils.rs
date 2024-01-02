@@ -6,3 +6,4 @@ pub mod space_samplers;
 pub mod random_svd;
 pub mod pca_rsvd;
 pub mod active_subspaces;
+pub mod interp_utils;
