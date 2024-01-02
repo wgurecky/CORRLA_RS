@@ -2,36 +2,25 @@
 /// constrained and unconstrained problems
 /// from various distributions
 use ndarray::prelude::*;
+use ndarray::{concatenate};
 use rand::prelude::*;
 use rand_distr::Dirichlet;
+use rayon::prelude::*;
 
-/// Draws samples, x_i such that
-///     \sum_i x_i = c_scale
-///     and
-///     lb_i <= x_i <= ub_i
-///
-///     # Arguments
-///     * `bounds` - 2D ndarray of [[lb_i, ub_i], ...]
-///     * `n_samples` - number of samples desired
-///     * `max_zshots` - number of shots with each each 'shot' having chunk_size
-///     * `chunk_size` - number of samples per shot
-///     * `c_scale` - sum constraint
-pub fn constr_dirichlet_sample(
+fn dirichlet_shot_sample(
     bounds: ArrayView2<f64>,
-    n_samples: usize,
+    mut c_zs: ArrayViewMut2<f64>,
     max_zshots: usize,
     chunk_size: usize,
-    c_scale: f64,
-    ) -> Array2<f64>
+    c_scale: f64
+    )
 {
-    let ndim = bounds.nrows();
     let mut alphas = Vec::new();
+    let ndim = bounds.nrows();
     for _i in 0..ndim {
         alphas.push(1.0);
     }
-
-    // storage for final constrained samples
-    let mut c_zs: Array2<f64> = Array2::zeros((n_samples, ndim));
+    let n_samples = c_zs.nrows();
     let mut k_valid = 0;
     for _shot in 0..max_zshots {
         // unconstrained samples, uniform in z
@@ -57,11 +46,58 @@ pub fn constr_dirichlet_sample(
                 k_valid += 1;
             }
             if k_valid >= n_samples {
-                return c_zs;
+                break;
             }
         }
+        if k_valid >= n_samples {
+            break;
+        }
     }
-    c_zs
+}
+
+/// Draws samples, x_i such that
+///     \sum_i x_i = c_scale
+///     and
+///     lb_i <= x_i <= ub_i
+///
+pub fn constr_dirichlet_sample(
+    bounds: ArrayView2<f64>,
+    n_samples: usize,
+    max_zshots: usize,
+    chunk_size: usize,
+    c_scale: f64,
+    ) -> Array2<f64>
+{
+    let ndim = bounds.nrows();
+    // split total number of desired samples into chunks
+    let n_par = std::cmp::min(n_samples, 10);
+    let mut all_zshots = Vec::new();
+    let mut avail_samples = n_samples;
+    let mut local_n_samples = n_samples / n_par;
+    loop {
+        if local_n_samples > avail_samples {
+            local_n_samples = avail_samples;
+        }
+        let mut zs: Array2<f64> = Array2::zeros((local_n_samples, ndim));
+        all_zshots.push(zs);
+        avail_samples = std::cmp::max(avail_samples-local_n_samples, 0);
+        if avail_samples <= 0 {
+            break;
+        }
+    }
+    // parallel sample
+    all_zshots.par_iter_mut().for_each(|c_zs|
+        {
+            dirichlet_shot_sample(bounds, c_zs.view_mut(), max_zshots,
+                    chunk_size, c_scale);
+        });
+    // collect samples
+    let mut all_zshot_view = Vec::new();
+    for p in 0..all_zshots.len() {
+        all_zshot_view.push(all_zshots[p].view());
+    }
+    let all_samples = concatenate(Axis(0), &all_zshot_view).unwrap();
+    all_samples
 }
 
 
@@ -80,9 +116,25 @@ mod space_samplers_unit_tests {
              [0.80, 0.825],
              ]);
 
-        let n_samples = 10;
-        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 50000, 1.0);
-        print!("Samples: {:?}", samples);
+        let n_samples = 8;
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        print!("Samples: {:?} \n", samples);
+        assert_eq!(samples.nrows(), n_samples);
+        for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
+            assert_approx_eq!(sample.sum(), 1.0);
+        }
+
+        let n_samples = 13;
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        print!("Samples: {:?} \n", samples);
+        assert_eq!(samples.nrows(), n_samples);
+        for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
+            assert_approx_eq!(sample.sum(), 1.0);
+        }
+
+        let n_samples = 21;
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        print!("Samples: {:?} \n", samples);
         assert_eq!(samples.nrows(), n_samples);
         for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
             assert_approx_eq!(sample.sum(), 1.0);
