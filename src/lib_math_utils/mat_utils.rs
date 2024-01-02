@@ -37,7 +37,7 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
 {
     let x_svd = x.svd();
     let u = x_svd.u();
-    let eps = T::from(1.0e-12).unwrap();
+    let eps = T::from(1.0e-14).unwrap();
     let s_vec = x_svd.s_diagonal();
     let v = x_svd.v();
     let mut s_inv_mat = faer::Mat::zeros(x.ncols(), x.nrows());
