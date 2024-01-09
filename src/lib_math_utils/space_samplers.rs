@@ -163,7 +163,7 @@ impl LnPriorUniform {
 impl LnProbFn for LnPriorUniform {
     fn lnp(&self, sample: ArrayView1<f64>, extra_args: &Vec<f64>) -> f64
     {
-        let mut valid = false;
+        let mut valid = true;
         for (i, bound) in self.bounds.axis_iter(Axis(0)).enumerate() {
             valid = valid && bound[0] < sample[i] && sample[i] < bound[1]
         }
@@ -356,11 +356,11 @@ impl DeMcSampler {
 
     fn accept_prob_ratio(&self, cur_sample: ArrayView1<f64>, prop_sample: ArrayView1<f64>) -> f64
     {
-        let lnp_diff = self.ln_prob_fn.lnp(prop_sample, &Vec::new()) -
-                       self.ln_prob_fn.lnp(cur_sample, &Vec::new());
-        let mut alpha: f64 = lnp_diff;
-        alpha = alpha.max(0.0);
+        let prop_lnp = self.ln_prob_fn.lnp(prop_sample, &Vec::new());
+        let cur_lnp = self.ln_prob_fn.lnp(cur_sample, &Vec::new());
+        let mut alpha = (prop_lnp - cur_lnp).exp();
         alpha = alpha.min(1.0);
+        alpha = alpha.max(0.0);
         alpha
     }
 
@@ -449,9 +449,15 @@ mod space_samplers_unit_tests {
 
         // Check the estimated mean and var against known]
         let tst_samples = tst_mcmc_sampler.get_samples(500);
-        println!("Samples: {:?}", tst_samples);
+        println!("MCMC Samples: {:?}", tst_samples);
         println!("Accept ratio: {:?}", tst_mcmc_sampler.accept_ratio());
 
+        // compute sample mean
+        let tst_sample_std = tst_samples.std(1.0);
+        let tst_sample_mu = tst_samples.mean().unwrap();
+        println!("Mean, std: {:?}, {:?}", tst_sample_mu, tst_sample_std);
+        assert_approx_eq!(tst_sample_mu, tst_mu, 5.0e-1);
+        assert_approx_eq!(tst_sample_std, tst_std, 5.0e-1);
     }
 
     #[test]
