@@ -178,10 +178,10 @@ impl LnProbFn for LnPriorUniform {
 
 /// A Dirichlet MV likelihood
 struct LnLikeDirichlet {
-    alpha: Array1<f64>,
+    alpha: Vec<f64>,
 }
 impl LnLikeDirichlet {
-    pub fn new(alpha: ArrayView1<f64>) -> Self {
+    pub fn new(alpha: &Vec<f64>) -> Self {
         Self {
             alpha: alpha.to_owned(),
         }
@@ -192,7 +192,7 @@ impl LnProbFn for LnLikeDirichlet {
     {
         // Diriclet PDF is only valid if sum(x)=1
         assert_approx_eq!(sample.sum(), 1.0);
-        let alpha_0: f64 = self.alpha.sum();
+        let alpha_0: f64 = self.alpha.iter().sum();
         let mut numer = 1.0;
         for alph in self.alpha.iter() {
             numer = numer * gamma::gamma(*alph);
@@ -449,8 +449,9 @@ mod space_samplers_unit_tests {
 
         // Check the estimated mean and var against known]
         let tst_samples = tst_mcmc_sampler.get_samples(500);
+        let ar = tst_mcmc_sampler.accept_ratio();
         println!("MCMC Samples: {:?}", tst_samples);
-        println!("Accept ratio: {:?}", tst_mcmc_sampler.accept_ratio());
+        println!("Accept ratio: {:?}", ar);
 
         // compute sample mean
         let tst_sample_std = tst_samples.std(1.0);
@@ -458,14 +459,63 @@ mod space_samplers_unit_tests {
         println!("Mean, std: {:?}, {:?}", tst_sample_mu, tst_sample_std);
         assert_approx_eq!(tst_sample_mu, tst_mu, 5.0e-1);
         assert_approx_eq!(tst_sample_std, tst_std, 5.0e-1);
+        assert!(ar > 0.2);
     }
 
     #[test]
-    fn test_demcmc_sampler_diriclet() {
+    fn test_demcmc_dirichlet() {
         // TODO: test ability to draw samples from
-        // constrained 3D diriclet dist.
+        // constrained 3D dirichlet dist.
         // This is useful to greatly improve efficiency of drawing
-        // samples froma highly constrained diriclet sampling problem
+        // samples froma highly constrained dirichlet sampling problem
         // in high dimensions where rejection sampling alone is inefficient.
+        let bounds = arr2(&[
+             [0.0, 0.0026],
+             [0.1955, 0.1995],
+             [0.80, 0.825],
+             ]);
+
+        let n_samples = 8;
+        let diri_samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+
+        // Bounds for MCMC prior
+        let tst_ln_prior = LnPriorUniform::new(bounds.view());
+        // construct likelihood
+        let alphas = vec![1.0, 1.0, 1.0];
+        let tst_ln_like = LnLikeDirichlet::new(&alphas);
+        // construct likelihood*prior
+        let tst_ln_like_prior = LnLikeSum::new(tst_ln_like, tst_ln_prior);
+
+        // define fixup function
+        // this is required for sampling from the MV Diriclet dist since
+        // the support is only on the simplex sum_i x_i = 1, and the
+        // mcmc proposal x_i may fall off this simplex
+        let proposal_fix_fn = | x: ArrayView1<f64> | -> Array1<f64> {
+            let mut new_x = x.to_owned();
+            // must sum to 1
+            new_x = new_x.clone() / new_x.sum();
+            new_x
+        };
+
+        // initialize chains at seed locations
+        let mut tst_chains: Vec<McmcChain> = Vec::new();
+        for (c, seed_s) in diri_samples.rows().into_iter().enumerate() {
+            tst_chains.push(McmcChain::new(3, seed_s, c));
+        }
+        // init the MCMC sampler
+        let mut tst_mcmc_sampler = DeMcSampler::new(tst_ln_like_prior, tst_chains, 1, 0.8, 1.0e-10);
+
+        // specify the proposal fixup function
+        tst_mcmc_sampler.set_prop_fixup(proposal_fix_fn);
+
+        // draw samples
+        let n_samples: usize = 1000;
+        tst_mcmc_sampler.sample_mcmc(n_samples);
+
+        // TODO: check samples
+        //let tst_samples = tst_mcmc_sampler.get_samples(500);
+        let ar = tst_mcmc_sampler.accept_ratio();
+        //println!("MCMC Diriclet Samples: {:?}", tst_samples);
+        println!("Accept ratio: {:?}", ar);
     }
 }
