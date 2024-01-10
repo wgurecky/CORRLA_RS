@@ -3,6 +3,7 @@
 /// from various distributions
 use ndarray::prelude::*;
 use ndarray::{concatenate};
+use std::{thread, time::Duration};
 use rand::prelude::*;
 use statrs::function::gamma;
 use rand::distributions::{WeightedIndex, Uniform};
@@ -150,16 +151,16 @@ impl McmcChain {
 
 
 /// Interface for log probability methods used in MCMC samplers
-trait LnProbFn {
+trait LnProbFn: Sync + Send {
     fn lnp(&self, sample: ArrayView1<f64>, extra_args: &Vec<f64>) -> f64;
 }
 
 /// A custom likelihood function
 struct LnLikeCustom {
-    ln_like_fn: Box<dyn Fn(ArrayView1<f64>, &Vec<f64>)->f64>,
+    ln_like_fn: Box<dyn Fn(ArrayView1<f64>, &Vec<f64>)->f64 + Send + Sync>,
 }
 impl LnLikeCustom {
-    pub fn new(lnf: impl Fn(ArrayView1<f64>, &Vec<f64>)->f64 + 'static) -> Self {
+    pub fn new(lnf: impl Fn(ArrayView1<f64>, &Vec<f64>)->f64 + 'static + Send + Sync) -> Self {
         Self { ln_like_fn: Box::new(lnf) }
     }
 }
@@ -255,7 +256,7 @@ struct DeMcSampler {
     n_chains: usize,
     ndim: usize,
     var_epsilon: f64,
-    prop_fixup_fn: Option< Box<dyn Fn(ArrayView1<f64>)->Array1<f64>> >,
+    prop_fixup_fn: Option< Box<dyn Fn(ArrayView1<f64>)->Array1<f64> + Send + Sync> >,
     ln_prob_fn: Box<dyn LnProbFn>,
     n_accept: usize,
     n_reject: usize,
@@ -286,7 +287,7 @@ impl DeMcSampler {
         }
     }
 
-    pub fn set_prop_fixup(&mut self, fixup_fn: impl Fn(ArrayView1<f64>)->Array1<f64> + 'static) {
+    pub fn set_prop_fixup(&mut self, fixup_fn: impl Fn(ArrayView1<f64>)->Array1<f64> + 'static + Sync + Send) {
         self.prop_fixup_fn = Some(Box::new(fixup_fn));
     }
 
@@ -368,6 +369,25 @@ impl DeMcSampler {
                     self.n_reject += 1;
                 }
                 self.chains[c_i].append_sample(c_sample.view());
+            }
+        }
+    }
+
+    /// draw n_samples on all chains in parallel
+    pub fn sample_mcmc_par(&mut self, n_samples: usize) {
+        for _s in 0..n_samples {
+            let mut p_sample_vec = Vec::new();
+            p_sample_vec = (0..self.n_chains).into_par_iter()
+                .map(|c_i| { self.step_chain(self.chains_id[c_i]) })
+                .collect();
+            for (c_i, (act, p_samp)) in p_sample_vec.iter().enumerate() {
+                if *act {
+                    self.n_accept += 1;
+                }
+                else {
+                    self.n_reject += 1;
+                }
+                self.chains[c_i].append_sample(p_samp.view());
             }
         }
     }
@@ -498,8 +518,9 @@ mod space_samplers_unit_tests {
              [0.80, 0.825],
              ]);
 
-        let n_samples = 8;
-        let diri_samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0, None);
+        // Draw a few samples that fall within the feasible region using rejection sampling
+        let n_seed_samples = 8;
+        let diri_samples = constr_dirichlet_sample(bounds.view(), n_seed_samples, 500, 20000, 1.0, None);
 
         // Bounds for MCMC prior
         let tst_ln_prior = LnPriorUniform::new(bounds.view());
@@ -516,6 +537,7 @@ mod space_samplers_unit_tests {
         let proposal_fix_fn = | x: ArrayView1<f64> | -> Array1<f64> {
             let mut new_x = x.to_owned();
             // must sum to 1
+            thread::sleep(Duration::from_millis(1));
             new_x = new_x.clone() / new_x.sum();
             new_x
         };
@@ -533,12 +555,16 @@ mod space_samplers_unit_tests {
 
         // draw samples
         let n_samples: usize = 1000;
-        tst_mcmc_sampler.sample_mcmc(n_samples);
+        tst_mcmc_sampler.sample_mcmc_par(n_samples);
+        let ar = tst_mcmc_sampler.accept_ratio();
+        println!("Accept ratio: {:?}", ar);
 
         // TODO: check samples
-        let tst_samples = tst_mcmc_sampler.get_samples(500);
-        let ar = tst_mcmc_sampler.accept_ratio();
+        let tst_samples = tst_mcmc_sampler.get_samples(500/8);
         println!("MCMC Diriclet Samples: {:?}", tst_samples);
-        println!("Accept ratio: {:?}", ar);
+        // assert_eq!(tst_samples.nrows(), n_samples);
+        for (_i, sample) in tst_samples.axis_iter(Axis(0)).enumerate() {
+            assert_approx_eq!(sample.sum(), 1.0);
+        }
     }
 }
