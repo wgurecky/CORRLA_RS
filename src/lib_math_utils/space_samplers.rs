@@ -248,6 +248,7 @@ impl DeMcSampler {
         assert!(n_chains >= 3);
         let mut chains_id = Vec::new();
         for c in 0..n_chains {
+            assert!(chains[c].samples.ncols() == ndim);
             chains_id.push(c.clone());
         }
         Self {
@@ -277,7 +278,8 @@ impl DeMcSampler {
     pub fn get_chain_samples(&self, n_tail: usize, id: usize) -> Array2<f64> {
         // self.chains[id].samples.ro
         // self.chains[id].samples.view()
-        self.chains[id].samples.slice(s![self.n_samples()-n_tail-1.., ..]).to_owned()
+        let n_s: i32 = n_tail as i32;
+        self.chains[id].samples.slice(s![-n_s.., ..]).to_owned()
     }
 
     /// Get the last n_tail samples from all chains
@@ -503,7 +505,7 @@ mod space_samplers_unit_tests {
             tst_chains.push(McmcChain::new(3, seed_s, c));
         }
         // init the MCMC sampler
-        let mut tst_mcmc_sampler = DeMcSampler::new(tst_ln_like_prior, tst_chains, 1, 0.8, 1.0e-10);
+        let mut tst_mcmc_sampler = DeMcSampler::new(tst_ln_like_prior, tst_chains, 3, 0.8, 1.0e-10);
 
         // specify the proposal fixup function
         tst_mcmc_sampler.set_prop_fixup(proposal_fix_fn);
@@ -513,9 +515,9 @@ mod space_samplers_unit_tests {
         tst_mcmc_sampler.sample_mcmc(n_samples);
 
         // TODO: check samples
-        //let tst_samples = tst_mcmc_sampler.get_samples(500);
+        let tst_samples = tst_mcmc_sampler.get_samples(500);
         let ar = tst_mcmc_sampler.accept_ratio();
-        //println!("MCMC Diriclet Samples: {:?}", tst_samples);
+        println!("MCMC Diriclet Samples: {:?}", tst_samples);
         println!("Accept ratio: {:?}", ar);
     }
 }
