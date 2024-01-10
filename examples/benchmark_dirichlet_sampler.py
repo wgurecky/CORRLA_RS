@@ -81,7 +81,9 @@ if __name__ == "__main__":
         from corrla_rs import cs_dirichlet_sample
 
         ti = time.time()
-        samples = cs_dirichlet_sample(bounds, n_samples, 500, 1000000, 1.0)
+        alphas = [1.0] * len(bounds)
+        np_alphas = np.asarray(alphas)
+        samples = cs_dirichlet_sample(bounds, n_samples, 500, 1000000, 1.0, np_alphas)
         tf = time.time()
         print("Rust Corrla sample time: %0.4e" % (tf-ti))
         print(len(samples))

@@ -15,21 +15,18 @@ fn dirichlet_shot_sample(
     mut c_zs: ArrayViewMut2<f64>,
     max_zshots: usize,
     chunk_size: usize,
-    c_scale: f64
+    c_scale: f64,
+    alphas: &Vec<f64>
     )
 {
-    let mut alphas = Vec::new();
     let ndim = bounds.nrows();
-    for _i in 0..ndim {
-        alphas.push(1.0);
-    }
     let n_samples = c_zs.nrows();
     let mut k_valid = 0;
     for _shot in 0..max_zshots {
         // unconstrained samples, uniform in z
         let mut u_zs: Array2<f64> = Array2::zeros((chunk_size, ndim));
         for (_i, mut row) in u_zs.axis_iter_mut(Axis(0)).enumerate() {
-            let dirichlet_rv = Dirichlet::new(&alphas).unwrap();
+            let dirichlet_rv = Dirichlet::new(alphas).unwrap();
             let u_z_sample = dirichlet_rv.sample(&mut rand::thread_rng());
             row.assign(&Array1::from_vec(u_z_sample));
         }
@@ -69,9 +66,33 @@ pub fn constr_dirichlet_sample(
     max_zshots: usize,
     chunk_size: usize,
     c_scale: f64,
+    in_alphas: Option<Vec<f64>>
     ) -> Array2<f64>
 {
     let ndim = bounds.nrows();
+    // set default Diriclet dist shape params if not specified
+    let mut alphas = Vec::new();
+    match in_alphas {
+        Some(in_alphas) => {
+            if in_alphas.len() == ndim {
+                alphas = in_alphas;
+            }
+            else if in_alphas.len() == 1 {
+                for _i in 0..ndim {
+                    alphas.push(in_alphas[0]);
+                }
+            }
+            else {
+                panic!("Number of shape parameters to Diriclet sampler must be ndim or 1 for the sym case");
+            }
+        }
+        _ => {
+            for _i in 0..ndim {
+                alphas.push(1.0);
+            }
+        }
+    }
+
     // split total number of desired samples into chunks
     let n_par = std::cmp::min(n_samples, 10);
     let mut all_zshots = Vec::new();
@@ -92,7 +113,7 @@ pub fn constr_dirichlet_sample(
     all_zshots.par_iter_mut().for_each(|c_zs|
         {
             dirichlet_shot_sample(bounds, c_zs.view_mut(), max_zshots,
-                    chunk_size, c_scale);
+                    chunk_size, c_scale, &alphas);
         });
     // collect samples
     let mut all_zshot_view = Vec::new();
@@ -393,7 +414,7 @@ mod space_samplers_unit_tests {
              ]);
 
         let n_samples = 8;
-        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0, None);
         print!("Samples: {:?} \n", samples);
         assert_eq!(samples.nrows(), n_samples);
         for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
@@ -401,7 +422,7 @@ mod space_samplers_unit_tests {
         }
 
         let n_samples = 13;
-        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0, None);
         print!("Samples: {:?} \n", samples);
         assert_eq!(samples.nrows(), n_samples);
         for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
@@ -409,7 +430,7 @@ mod space_samplers_unit_tests {
         }
 
         let n_samples = 21;
-        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        let samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0, None);
         print!("Samples: {:?} \n", samples);
         assert_eq!(samples.nrows(), n_samples);
         for (_i, sample) in samples.axis_iter(Axis(0)).enumerate() {
@@ -478,7 +499,7 @@ mod space_samplers_unit_tests {
              ]);
 
         let n_samples = 8;
-        let diri_samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0);
+        let diri_samples = constr_dirichlet_sample(bounds.view(), n_samples, 500, 20000, 1.0, None);
 
         // Bounds for MCMC prior
         let tst_ln_prior = LnPriorUniform::new(bounds.view());

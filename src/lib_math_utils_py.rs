@@ -1,5 +1,5 @@
 use numpy::ndarray::{Array1, Array2, ArrayD, ArrayView1, ArrayViewD, ArrayViewMutD, Zip};
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2, PyArrayDyn, PyReadonlyArrayDyn};
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2, PyReadonlyArray1, PyArrayDyn, PyReadonlyArrayDyn};
 use pyo3::{exceptions::PyRuntimeError, pyclass, pymodule, types::PyModule, PyResult, Python};
 use pyo3::prelude::*;
 
@@ -86,11 +86,13 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         max_zshots: usize,
         chunk_size: usize,
         c_scale: f64,
+        np_alphas: PyReadonlyArray1<'py, f64>
         ) -> &'py PyArray2<f64>
     {
         let bounds = np_bounds.as_array();
+        let vec_alphas = Some(np_alphas.as_array().to_vec());
         let samples = constr_dirichlet_sample(
-            bounds, n_samples, max_zshots, chunk_size, c_scale);
+            bounds, n_samples, max_zshots, chunk_size, c_scale, vec_alphas);
         let ndarray_samples = samples.to_owned();
         ndarray_samples.into_pyarray(py)
     }
