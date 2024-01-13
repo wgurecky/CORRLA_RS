@@ -13,6 +13,7 @@ path = 'src/lib.rs'
 
 [dependencies]
 assert_approx_eq = "*"
+itertools = "*"
 rand = "*"
 statrs = "*"
 argmin = "*"
