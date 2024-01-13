@@ -22,6 +22,7 @@ debug:
     expire_in: 1 week
     when: always
   script:
+    - cargo clean
     - cargo build
     - cargo test -- --nocapture |& tee test.out
 
@@ -39,6 +40,7 @@ release:
     expire_in: 1 week
     when: always
   script:
+    - cargo clean
     - cargo build --release
     - cargo test --release |& tee test_rel.out
 
