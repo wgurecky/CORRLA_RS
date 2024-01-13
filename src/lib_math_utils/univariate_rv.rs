@@ -292,7 +292,8 @@ impl UniRv for BetaRv {
         let rv_f = Beta::new(alpha, beta).unwrap();
         let mut out = Array1::zeros(n_samples);
         for i in 0..n_samples {
-            out[i] = rv_f.sample(&mut rand::thread_rng());
+            out[i] = (rv_f.sample(&mut rand::thread_rng())*(self.upper_b-self.lower_b))
+                     + self.lower_b;
         }
         out
     }
