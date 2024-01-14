@@ -5,6 +5,7 @@
 use assert_approx_eq::assert_approx_eq;
 use rand_distr::{Normal, Distribution, Beta, Exp};
 use rand::Rng;
+use rand::seq::index;
 use rayon::prelude::*;
 use itertools::Itertools;
 use ndarray::prelude::*;
@@ -355,19 +356,15 @@ impl UniRv for ExponentialRv {
 #[derive(Debug, Clone)]
 pub struct KdeRv {
     bandwidth: f64,
-    weights: Vec<f64>,
+    weights: Array1<f64>,
     kernel: NormalRv,
     supports: Array1<f64>,
 }
 impl KdeRv {
     pub fn new(init_bandwidth: f64, samples: ArrayView1<f64>) -> Result<Self, Error> {
-        let mut wgts: Vec<f64> = vec![];
-        for s in samples {
-            wgts.push(1.0 / samples.len() as f64);
-        }
         let init_self = Self {
             bandwidth: init_bandwidth,
-            weights: wgts,
+            weights: Array1::ones(samples.len()) / samples.len() as f64,
             kernel: NormalRv::new(0.0, 1.0),
             supports: samples.to_owned(),
         };
@@ -377,7 +374,7 @@ impl KdeRv {
     /// test samples should be different than support samples in the KDE case!
     /// Split the total sample populatin into a train/test set
     /// use train set for support points of KDE, test set is used for fitting.
-    fn est_bandwidth(&mut self, test_samples: ArrayView1<f64>, method: Option<usize>)
+    pub fn est_bandwidth(&mut self, test_samples: ArrayView1<f64>, method: Option<usize>)
         -> Result<f64, Error>
     {
         // initial guesses for parameters
@@ -433,6 +430,38 @@ impl UniRv for KdeRv {
     }
 }
 
+/// Construct a KDE from samples automating cross validation method
+/// of automatic bandwidth estimation.
+pub fn build_kde(init_bandwidth: f64, samples: ArrayView1<f64>, n_iter: usize) -> Result<KdeRv, Error>
+{
+    // get many indep estimates of bandwidth
+    let mut bandwidth_ests: Vec<f64> = Vec::new();
+    let mut rng = rand::thread_rng();
+    for _i in 0..n_iter {
+        // split the total number of samples into train/test
+        let mut support_samples = Vec::new();
+        let mut test_samples = Vec::new();
+        for s in samples {
+            if rng.gen_bool(0.6) {
+                support_samples.push(*s);
+            }
+            else {
+                test_samples.push(*s);
+            }
+        }
+        let s_samp = Array1::from_vec(support_samples);
+        let s_test = Array1::from_vec(test_samples);
+        let bwe = KdeRv::new(init_bandwidth, s_samp.view())
+            .unwrap()
+            .est_bandwidth(s_test.view(), Some(1));
+        bandwidth_ests.push(bwe.unwrap());
+    }
+    // avg bandwidth
+    let bw: f64 = bandwidth_ests.into_iter().sum::<f64>()
+        / n_iter as f64;
+    KdeRv::new(bw, samples)
+}
+
 
 #[cfg(test)]
 mod univariate_rv_unit_tests {
@@ -462,7 +491,7 @@ mod univariate_rv_unit_tests {
     #[test]
     fn test_kde_rv() {
         // generate random samples from known norml dist
-        let rv_known = Normal::new(5.25, 10.0).unwrap();
+        let rv_known = Normal::new(5.25, 10.).unwrap();
         let ns = 100;
         let mut tst_s = Array1::zeros(ns);
         let mut support_s = Array1::zeros(ns);
@@ -472,7 +501,7 @@ mod univariate_rv_unit_tests {
         // init KDE dist
         let mut kde_dist = KdeRv::new(1.0, support_s.view()).unwrap();
         // estimate optimal bandwidth
-        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(2)).unwrap();
+        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(1)).unwrap();
         kde_dist.bandwidth = est_band;
 
         // sample from fitted KDE dist
@@ -481,6 +510,16 @@ mod univariate_rv_unit_tests {
         println!("Real pop mean: {:?}, KDE Mean: {:?}", support_s.mean(), kde_samples.mean());
         println!("Real pop std: {:?}, KDE std: {:?}", support_s.std(0.), kde_samples.std(0.));
         assert_approx_eq!(support_s.mean().unwrap(), kde_samples.mean().unwrap(), 9e-1);
-        //assert_approx_eq!(support_s.std(0.), kde_samples.std(0.), 9e-1);
+        assert_approx_eq!(support_s.std(0.), kde_samples.std(0.), 3.);
+
+        // test kde automated builder
+        let auto_kde_dist = build_kde(1.0, support_s.view(), 10).unwrap();
+        let kde_samples = auto_kde_dist.sample(10000, None);
+        println!("Fitted KDE bandwidth: {:?}", auto_kde_dist.bandwidth);
+        println!("Real pop mean: {:?}, KDE Mean: {:?}", support_s.mean(), kde_samples.mean());
+        println!("Real pop std: {:?}, KDE std: {:?}", support_s.std(0.), kde_samples.std(0.));
+        assert_approx_eq!(support_s.mean().unwrap(), kde_samples.mean().unwrap(), 9e-1);
+        assert_approx_eq!(support_s.std(0.), kde_samples.std(0.), 3.);
+
     }
 }
