@@ -5,15 +5,16 @@
 use assert_approx_eq::assert_approx_eq;
 use rand_distr::{Normal, Distribution, Beta, Exp};
 use rand::Rng;
+use rayon::prelude::*;
 use itertools::Itertools;
 use ndarray::prelude::*;
 use statrs::function::{erf, gamma::{gamma, self}, beta::beta_reg};
 use std::f64::consts::PI;
-// use finitediff::FiniteDiff;
+use finitediff::FiniteDiff;
 use argmin::{
     core::{CostFunction, Gradient, Error, Executor},
     solver::{particleswarm::ParticleSwarm},
-    solver::{linesearch::MoreThuenteLineSearch, quasinewton::LBFGS},
+    solver::{linesearch::MoreThuenteLineSearch, quasinewton::LBFGS, quasinewton::BFGS, quasinewton::DFP},
     solver::neldermead::NelderMead,
 };
 
@@ -48,7 +49,7 @@ pub fn mlefit(cost: OptMleProblem, method: Option<usize>) -> Result<Vec<f64>, Er
             // set up a line search
             let linesearch = MoreThuenteLineSearch::new().with_c(1e-4, 0.9)?;
             // Set up solver
-            let solver = LBFGS::new(linesearch, 7);
+            let solver = LBFGS::new(linesearch, 2);
             // Run solver
             let res = Executor::new(cost, solver)
                 .configure(|state| state.param(init_param).max_iters(200))
@@ -122,38 +123,36 @@ impl Gradient for OptMleProblem {
     type Gradient = Vec<f64>;
 
     fn gradient(&self, p: &Self::Param) -> Result<Self::Gradient, Error> {
-//         Ok((*p).forward_diff(&|x|
-//                 self.dist_rv.nll(self.tmp_samples.view(), Some(x))
-//                 )
-//           )
-        let fp0 = self.dist_rv.nll(self.tmp_samples.view(), Some(p));
-        let eps = 1e-12;
-        let mut out_grad = p.to_owned();
-        for i in 0..out_grad.len() {
-            let mut p_pert = p.to_owned();
-            p_pert[i] += eps;
-            let fpi = self.dist_rv.nll(self.tmp_samples.view(), Some(&p_pert));
-            out_grad[i] = (fpi - fp0) / eps
-        }
-        Ok(out_grad)
+        Ok((*p).forward_diff(&|x|
+                self.dist_rv.nll(self.tmp_samples.view(), Some(x))
+                )
+          )
+//         let fp0 = self.dist_rv.nll(self.tmp_samples.view(), Some(p));
+//         let eps = 1e-12;
+//         let mut out_grad = p.to_owned();
+//         for i in 0..out_grad.len() {
+//             let mut p_pert = p.to_owned();
+//             p_pert[i] += eps;
+//             let fpi = self.dist_rv.nll(self.tmp_samples.view(), Some(&p_pert));
+//             out_grad[i] = (fpi - fp0) / eps
+//         }
+//         Ok(out_grad)
     }
 }
 
 
 /// Define interface for univariate RVs
 // pub trait UniRv<const NPARAM: usize> {
-pub trait UniRv {
+pub trait UniRv: Sync + Send {
     //fn pdff(&self, x: f64, params: Option<[f64; NPARAM]>) -> f64;
     fn pdf(&self, x: f64, params: Option<&Vec<f64>>) -> f64;
     fn cdf(&self, x: f64, params: Option<&Vec<f64>>) -> f64;
     fn sample(&self, n_samples: usize, params: Option<&Vec<f64>>) -> Array1<f64>;
     /// Default implementation of negative log likelihood
     fn nll(&self, samples: ArrayView1<f64>, params: Option<&Vec<f64>>) -> f64 {
-        let mut ln_like: f64 = 0.0;
         // define negative log likelihood to be minimized
-        for x in samples {
-            ln_like += self.pdf(*x, params).ln();
-        }
+        let ln_like: f64 = samples.into_par_iter()
+            .map(|x| self.pdf(*x, params).ln()).sum();
         return -ln_like
     }
 }
@@ -357,21 +356,19 @@ impl UniRv for ExponentialRv {
 pub struct KdeRv {
     bandwidth: f64,
     weights: Vec<f64>,
-    kernels: Vec<NormalRv>,
+    kernel: NormalRv,
     supports: Array1<f64>,
 }
 impl KdeRv {
     pub fn new(init_bandwidth: f64, samples: ArrayView1<f64>) -> Result<Self, Error> {
         let mut wgts: Vec<f64> = vec![];
-        let mut kerns: Vec<NormalRv> = vec![];
         for s in samples {
             wgts.push(1.0 / samples.len() as f64);
-            kerns.push(NormalRv::new(*s, 1.0));
         }
         let init_self = Self {
             bandwidth: init_bandwidth,
             weights: wgts,
-            kernels: kerns,
+            kernel: NormalRv::new(0.0, 1.0),
             supports: samples.to_owned(),
         };
         Ok(init_self)
@@ -404,7 +401,7 @@ impl UniRv for KdeRv {
         let mut pdf_f: f64 = 0.0;
         for i in 0..self.weights.len() {
             let sp = self.supports[i];
-            pdf_f += self.weights[i] * self.kernels[i].pdf(x, Some(&vec![sp, bandwidth]));
+            pdf_f += self.weights[i] * self.kernel.pdf(x, Some(&vec![sp, bandwidth]));
         }
         pdf_f
     }
@@ -415,7 +412,7 @@ impl UniRv for KdeRv {
         let mut cdf_f: f64 = 0.0;
         for i in 0..self.weights.len() {
             let sp = self.supports[i];
-            cdf_f += self.weights[i] * self.kernels[i].cdf(x, Some(&vec![sp, bandwidth]));
+            cdf_f += self.weights[i] * self.kernel.cdf(x, Some(&vec![sp, bandwidth]));
         }
         cdf_f
     }
@@ -429,7 +426,7 @@ impl UniRv for KdeRv {
             // pick a random kernel
             let rng_idx = rng.gen_range(0..self.weights.len());
             let sp = self.supports[rng_idx];
-            let rng_samp = self.kernels[rng_idx].sample(1, Some(&vec![sp, bandwidth]))[0];
+            let rng_samp = self.kernel.sample(1, Some(&vec![sp, bandwidth]))[0];
             out[i] = rng_samp;
         }
         out
@@ -475,7 +472,7 @@ mod univariate_rv_unit_tests {
         // init KDE dist
         let mut kde_dist = KdeRv::new(1.0, support_s.view()).unwrap();
         // estimate optimal bandwidth
-        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(1)).unwrap();
+        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(2)).unwrap();
         kde_dist.bandwidth = est_band;
 
         // sample from fitted KDE dist
