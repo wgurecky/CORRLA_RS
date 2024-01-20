@@ -15,7 +15,9 @@ use finitediff::FiniteDiff;
 use argmin::{
     core::{CostFunction, Gradient, Error, Executor},
     solver::{particleswarm::ParticleSwarm},
-    solver::{linesearch::MoreThuenteLineSearch, quasinewton::LBFGS, quasinewton::BFGS, quasinewton::DFP},
+    solver::{linesearch::MoreThuenteLineSearch, linesearch::HagerZhangLineSearch},
+    solver::{quasinewton::LBFGS, quasinewton::BFGS, quasinewton::DFP},
+    solver::gradientdescent::SteepestDescent,
     solver::neldermead::NelderMead,
 };
 
@@ -23,13 +25,31 @@ use argmin::{
 pub fn mlefit(cost: OptMleProblem, method: Option<usize>) -> Result<Vec<f64>, Error> {
     let mut params_opt: Vec<f64> = Vec::new();
     match method.unwrap() {
-        1 => {
+        // Set up solver
+        0 => {
+            // SteepestDescent
+            let init_param = cost.p_init.clone();
+            // set up a line search
+            let linesearch = HagerZhangLineSearch::new();
             // Set up solver
-            // let p_bounds = (vec![-1000.0, 1.0e-12], vec![1000.0, 1000.0]);
-            // let p_bounds = vec![vec![-1000.0, 1.0e-12], vec![1000.0, 1000.0]];
-            // annoying conversion from vec to tuple since ParticleSwarm only accepts tuples of
+            let solver = SteepestDescent::new(linesearch);
+            // Run solver
+            let res = Executor::new(cost, solver)
+                .configure(|state| state.param(init_param).max_iters(40))
+                .run()?;
+            // extract best results
+            let p_best = res.state().clone().take_best_param();
+            params_opt = p_best.unwrap();
+        }
+        1 => {
+            // ParticleSwarm
+            // annoying conversion from vec to tuple since
+            // ParticleSwarm only accepts tuples of
             // vecs for bounds.  TODO: Make upstream PR to argmin crate.
-            let ptup_bounds: (_, _) = cost.p_bounds.clone().into_iter().collect_tuple().unwrap();
+            let ptup_bounds: (_, _) = cost.p_bounds.clone()
+                .into_iter()
+                .collect_tuple()
+                .unwrap();
             let solver = ParticleSwarm::new(ptup_bounds, 40);
             // Run solver
             let res = Executor::new(cost, solver)
@@ -37,104 +57,97 @@ pub fn mlefit(cost: OptMleProblem, method: Option<usize>) -> Result<Vec<f64>, Er
                 .run()?;
             // extract best results
             let p_best = res.state().clone().take_best_individual();
-            match p_best {
-                Some(p_best) => {
-                    params_opt = p_best.position;
-                }
-                _ => {println!("Fitting Failed");}
-            }
+            params_opt = p_best.unwrap().position;
         }
         2 => {
-            // let init_param = vec![10.0, 10.0];
+            // LBFGS
             let init_param = cost.p_init.clone();
             // set up a line search
-            let linesearch = MoreThuenteLineSearch::new().with_c(1e-4, 0.9)?;
+            let linesearch = HagerZhangLineSearch::new();
             // Set up solver
-            let solver = LBFGS::new(linesearch, 2);
+            let solver = LBFGS::new(linesearch, 4)
+                .with_tolerance_grad(1.0e-6)?
+                .with_tolerance_cost(1.0e-4)?;
             // Run solver
             let res = Executor::new(cost, solver)
-                .configure(|state| state.param(init_param).max_iters(200))
+                .configure(|state| state.param(init_param).max_iters(80))
                 .run()?;
             // extract best results
             let p_best = res.state().clone().take_best_param();
-            match p_best {
-                Some(p_best) => {
-                    params_opt = p_best;
-                }
-                _ => {println!("Fitting Failed");}
-            }
-
-        }
-        3 => {
-            let init_points: Vec<Vec<f64>> = vec![
-                vec![1.0, 3.0],
-                vec![2.0, 1.5],
-                vec![2.0, 1.0],
-                ];
-            let solver = NelderMead::new(init_points).with_sd_tolerance(5e-5)?;
-            let res = Executor::new(cost, solver)
-                .configure(|state| state.max_iters(400))
-                .run()?;
-            // extract best results
-            let p_best = res.state().clone().take_best_param();
-            match p_best {
-                Some(p_best) => {
-                    params_opt = p_best;
-                }
-                _ => {println!("Fitting Failed");}
-            }
+            params_opt = p_best.unwrap();
         }
         _ => {
-           {panic!("Supply valid method");}
+           {panic!("Supply valid method: 0=SD, 1=PS, 2:LBFGS");}
         }
     }
     Ok(params_opt)
 }
 
 
+/// Max likelihood fit with particleswarm fallback
+pub fn mlefit_ps_fallback(cost: OptMleProblem, method: Option<usize>)
+    -> Result<Vec<f64>, Error>
+{
+    let params_try = mlefit(cost.to_owned(), method);
+    match params_try {
+        Ok(p) => {
+            return Ok(p)
+        }
+        Err(_perr) => {
+            return mlefit(cost.to_owned(), Some(1))
+        }
+    }
+}
+
+
 /// Optimization problem for maximum likelihood est
-pub struct OptMleProblem {
-    dist_rv: Box<dyn UniRv>,
+#[derive(Clone)]
+pub struct OptMleProblem <'a> {
+    dist_rv: Box<&'a dyn UniRv>,
     tmp_samples: Array1<f64>,
     p_init: Vec<f64>,
     p_bounds: Vec<Vec<f64>>,
 }
-impl OptMleProblem {
-    pub fn new(dist_rv: impl UniRv + 'static, samples: Array1<f64>, init_params: Vec<f64>, p_bounds: Vec<Vec<f64>>) -> Self
+impl <'a> OptMleProblem <'a> {
+    pub fn new(dist_rv: Box<&'a dyn UniRv>, samples: Array1<f64>, init_params: Vec<f64>, p_bounds: Vec<Vec<f64>>) -> Self
     {
         Self {
-            dist_rv: Box::new(dist_rv),
+            dist_rv: dist_rv,
             tmp_samples: samples,
             p_init: init_params,
             p_bounds,
         }
     }
 }
-impl  CostFunction for OptMleProblem   {
+impl <'a> CostFunction for OptMleProblem <'a>  {
+    // type aliases
     type Param = Vec<f64>;
     type Output = f64;
 
     fn cost(&self, p: &Self::Param) -> Result<Self::Output, Error> {
         let fnll = self.dist_rv.nll(self.tmp_samples.view(), Some(p));
-        Ok(fnll)
+        let mut bounds_penalty = 0.0;
+        for i in 0..p.len() {
+            bounds_penalty += 1.0e1*((p[i] - self.p_bounds[0][i]).min(0.0)).powf(2.0);
+            bounds_penalty += 1.0e1*((p[i] - self.p_bounds[1][i]).max(0.0)).powf(2.0);
+        }
+        Ok(fnll + bounds_penalty)
     }
 }
-impl Gradient for OptMleProblem {
+impl <'a> Gradient for OptMleProblem <'a>{
+    // type aliases
     type Param = Vec<f64>;
     type Gradient = Vec<f64>;
 
     fn gradient(&self, p: &Self::Param) -> Result<Self::Gradient, Error> {
-        Ok((*p).forward_diff(&|x|
-                self.dist_rv.nll(self.tmp_samples.view(), Some(x))
-                )
-          )
-//         let fp0 = self.dist_rv.nll(self.tmp_samples.view(), Some(p));
+        Ok((*p).forward_diff(&|x| self.cost(x).unwrap()))
+//         let fp0 = self.cost(p).unwrap();
 //         let eps = 1e-12;
 //         let mut out_grad = p.to_owned();
 //         for i in 0..out_grad.len() {
 //             let mut p_pert = p.to_owned();
 //             p_pert[i] += eps;
-//             let fpi = self.dist_rv.nll(self.tmp_samples.view(), Some(&p_pert));
+//             let fpi = self.cost(&p_pert).unwrap();
 //             out_grad[i] = (fpi - fp0) / eps
 //         }
 //         Ok(out_grad)
@@ -187,7 +200,7 @@ impl  NormalRv  {
             vec![1000., 1000.],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            self.clone(), samples.to_owned(), init_params, p_bounds);
+            Box::new(self), samples.to_owned(), init_params, p_bounds);
         let params_opt = mlefit(opt_prob, method).unwrap();
         self.mu = params_opt[0];
         self.std = params_opt[1];
@@ -200,7 +213,7 @@ impl  UniRv for NormalRv  {
         let par = params.unwrap_or(&tmp_p);
         let mu = par[0];
         let std = par[1].abs();
-        1. / (std * self.pi_const) *
+        (1. / (std * self.pi_const)) *
             (-0.5*((x-mu)/std).powf(2.0)).exp()
     }
 
@@ -257,7 +270,7 @@ impl BetaRv {
             vec![100., 100.],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            self.clone(), samples.to_owned(), init_params, p_bounds);
+            Box::new(self), samples.to_owned(), init_params, p_bounds);
         let params_opt = mlefit(opt_prob, method).unwrap();
         self.alpha = params_opt[0];
         self.beta = params_opt[1];
@@ -320,7 +333,7 @@ impl ExponentialRv {
             vec![100.,],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            self.clone(), samples.to_owned(), init_params, p_bounds);
+            Box::new(self), samples.to_owned(), init_params, p_bounds);
         let params_opt = mlefit(opt_prob, method).unwrap();
         self.lambda = params_opt[0];
         Ok(())
@@ -381,12 +394,12 @@ impl KdeRv {
         let init_params = vec![self.bandwidth,];
         // bounds on parameters
         let p_bounds = vec![
-            vec![1.0e-12,],  // lower param bounds
+            vec![1.0e-9,],  // lower param bounds
             vec![1000.,],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            self.clone(), test_samples.to_owned(), init_params, p_bounds);
-        let params_opt = mlefit(opt_prob, method).unwrap();
+            Box::new(self), test_samples.to_owned(), init_params, p_bounds);
+        let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
         Ok(params_opt[0])
     }
 }
@@ -432,7 +445,8 @@ impl UniRv for KdeRv {
 
 /// Construct a KDE from samples automating cross validation method
 /// of automatic bandwidth estimation.
-pub fn build_kde(init_bandwidth: f64, samples: ArrayView1<f64>, n_iter: usize) -> Result<KdeRv, Error>
+pub fn build_kde(init_bandwidth: f64, samples: ArrayView1<f64>, n_iter: usize, method: usize)
+    -> Result<KdeRv, Error>
 {
     // get many indep estimates of bandwidth
     let mut bandwidth_ests: Vec<f64> = Vec::new();
@@ -442,7 +456,7 @@ pub fn build_kde(init_bandwidth: f64, samples: ArrayView1<f64>, n_iter: usize) -
         let mut support_samples = Vec::new();
         let mut test_samples = Vec::new();
         for s in samples {
-            if rng.gen_bool(0.6) {
+            if rng.gen_bool(0.7) {
                 support_samples.push(*s);
             }
             else {
@@ -453,7 +467,7 @@ pub fn build_kde(init_bandwidth: f64, samples: ArrayView1<f64>, n_iter: usize) -
         let s_test = Array1::from_vec(test_samples);
         let bwe = KdeRv::new(init_bandwidth, s_samp.view())
             .unwrap()
-            .est_bandwidth(s_test.view(), Some(1));
+            .est_bandwidth(s_test.view(), Some(method));
         bandwidth_ests.push(bwe.unwrap());
     }
     // avg bandwidth
@@ -501,7 +515,7 @@ mod univariate_rv_unit_tests {
         // init KDE dist
         let mut kde_dist = KdeRv::new(1.0, support_s.view()).unwrap();
         // estimate optimal bandwidth
-        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(1)).unwrap();
+        let est_band = kde_dist.est_bandwidth(tst_s.view(), Some(2)).unwrap();
         kde_dist.bandwidth = est_band;
 
         // sample from fitted KDE dist
@@ -513,7 +527,7 @@ mod univariate_rv_unit_tests {
         assert_approx_eq!(support_s.std(0.), kde_samples.std(0.), 3.);
 
         // test kde automated builder
-        let auto_kde_dist = build_kde(1.0, support_s.view(), 10).unwrap();
+        let auto_kde_dist = build_kde(1.0, support_s.view(), 10, 2).unwrap();
         let kde_samples = auto_kde_dist.sample(10000, None);
         println!("Fitted KDE bandwidth: {:?}", auto_kde_dist.bandwidth);
         println!("Real pop mean: {:?}, KDE Mean: {:?}", support_s.mean(), kde_samples.mean());
