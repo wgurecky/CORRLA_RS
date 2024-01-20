@@ -104,12 +104,12 @@ pub fn mlefit_ps_fallback(cost: OptMleProblem, method: Option<usize>)
 #[derive(Clone)]
 pub struct OptMleProblem <'a> {
     dist_rv: Box<&'a dyn UniRv>,
-    tmp_samples: Array1<f64>,
+    tmp_samples: ArrayView1<'a, f64>,
     p_init: Vec<f64>,
     p_bounds: Vec<Vec<f64>>,
 }
 impl <'a> OptMleProblem <'a> {
-    pub fn new(dist_rv: Box<&'a dyn UniRv>, samples: Array1<f64>, init_params: Vec<f64>, p_bounds: Vec<Vec<f64>>) -> Self
+    pub fn new(dist_rv: Box<&'a dyn UniRv>, samples: ArrayView1<'a, f64>, init_params: Vec<f64>, p_bounds: Vec<Vec<f64>>) -> Self
     {
         Self {
             dist_rv: dist_rv,
@@ -125,7 +125,7 @@ impl <'a> CostFunction for OptMleProblem <'a>  {
     type Output = f64;
 
     fn cost(&self, p: &Self::Param) -> Result<Self::Output, Error> {
-        let fnll = self.dist_rv.nll(self.tmp_samples.view(), Some(p));
+        let fnll = self.dist_rv.nll(self.tmp_samples, Some(p));
         let mut bounds_penalty = 0.0;
         for i in 0..p.len() {
             bounds_penalty += 1.0e1*((p[i] - self.p_bounds[0][i]).min(0.0)).powf(2.0);
@@ -200,8 +200,8 @@ impl  NormalRv  {
             vec![1000., 1000.],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            Box::new(self), samples.to_owned(), init_params, p_bounds);
-        let params_opt = mlefit(opt_prob, method).unwrap();
+            Box::new(self), samples.view(), init_params, p_bounds);
+        let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
         self.mu = params_opt[0];
         self.std = params_opt[1];
         Ok(())
@@ -270,8 +270,8 @@ impl BetaRv {
             vec![100., 100.],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            Box::new(self), samples.to_owned(), init_params, p_bounds);
-        let params_opt = mlefit(opt_prob, method).unwrap();
+            Box::new(self), samples.view(), init_params, p_bounds);
+        let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
         self.alpha = params_opt[0];
         self.beta = params_opt[1];
         Ok(())
@@ -333,8 +333,8 @@ impl ExponentialRv {
             vec![100.,],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            Box::new(self), samples.to_owned(), init_params, p_bounds);
-        let params_opt = mlefit(opt_prob, method).unwrap();
+            Box::new(self), samples.view(), init_params, p_bounds);
+        let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
         self.lambda = params_opt[0];
         Ok(())
     }
@@ -398,7 +398,7 @@ impl KdeRv {
             vec![1000.,],  // upper param bounds
         ];
         let opt_prob = OptMleProblem::new(
-            Box::new(self), test_samples.to_owned(), init_params, p_bounds);
+            Box::new(self), test_samples.view(), init_params, p_bounds);
         let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
         Ok(params_opt[0])
     }
