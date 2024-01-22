@@ -262,18 +262,35 @@ impl BetaRv {
     pub fn mlfit(&mut self, samples: ArrayView1<f64>, method: Option<usize>)
         -> Result<(), Error>
     {
-        // initial guesses for parameters
-        let init_params = vec![1., 1.];
-        // bounds on parameters
-        let p_bounds = vec![
-            vec![1.0e-12, 1.0e-12],  // lower param bounds
-            vec![100., 100.],  // upper param bounds
-        ];
-        let opt_prob = OptMleProblem::new(
-            Box::new(self), samples.view(), init_params, p_bounds);
-        let params_opt = mlefit_ps_fallback(opt_prob, method).unwrap();
-        self.alpha = params_opt[0];
-        self.beta = params_opt[1];
+        match method {
+            Some(m) => {
+                // initial guesses for parameters
+                let init_params = vec![1., 1.];
+                // bounds on parameters
+                let p_bounds = vec![
+                    vec![1.0e-4, 1.0e-4],  // lower param bounds
+                    vec![200., 200.],  // upper param bounds
+                ];
+                let opt_prob = OptMleProblem::new(
+                    Box::new(self), samples.view(), init_params, p_bounds);
+                let params_opt = mlefit_ps_fallback(opt_prob, Some(m)).unwrap();
+                self.alpha = params_opt[0];
+                self.beta = params_opt[1];
+            }
+            _ => {
+                // direct calculation of alpha, beta parameters from pop samples
+                let y_mu = samples.mean().unwrap();
+                let y_var = samples.std(1.0).powf(2.0);
+                let a = self.lower_b;
+                let c = self.upper_b;
+                let alpha_d = (a-y_mu)*(a*c-a*y_mu-c*y_mu+y_mu.powf(2.0)+y_var)/
+                    (y_var*(c-a));
+                let beta_d = -(c-y_mu)*(a*c-a*y_mu-c*y_mu+y_mu.powf(2.0)+y_var)/
+                    (y_var*(c-a));
+                self.alpha = alpha_d;
+                self.beta = beta_d;
+            }
+        }
         Ok(())
     }
 }
@@ -500,6 +517,53 @@ mod univariate_rv_unit_tests {
         println!("Real pop mean: {:?}, Fitted Mean: {:?}", tst_s.mean(), tst_rv.mu);
         assert_approx_eq!(tst_rv.mu, tst_s.mean().unwrap(), 1e-3);
         assert_approx_eq!(tst_rv.std, tst_s.std(0.0), 1e-3);
+    }
+
+    #[test]
+    fn test_beta_rv() {
+        let test_matrix = vec![
+            (1.0, 1.0, 0.0, 1.0),
+            (2.0, 2.0, 0.0, 100.0),
+            (0.25, 0.75, 2.0, 7.0),
+            (1.25, 2.75, 0.2, 0.3),
+            (0.25, 2.75, 0.0, 1.0),
+            (2.75, 0.25, 0.0, 1.0),
+            (0.25, 0.25, 0.0, 1.0),
+        ];
+        let ns = 40000;
+        for (alpha, beta, lower_b, upper_b) in test_matrix.into_iter() {
+            let rv_known = Beta::new(alpha, beta).unwrap();
+            // draw samples from known dist
+            let mut out = Array1::zeros(ns);
+            for i in 0..ns {
+                out[i] = (rv_known.sample(&mut rand::thread_rng())*(upper_b-lower_b))
+                         + lower_b;
+            }
+
+            // Init beta dist with junk initial vals
+            let mut tst_rv_a = BetaRv::new(1.0, 1.0, lower_b, upper_b);
+            // fit to samples
+            tst_rv_a.mlfit(out.view(), None);
+
+            // check fitted dist params
+            println!("Fitted alpha: {:?}  beta: {:?}", tst_rv_a.alpha, tst_rv_a.beta);
+            assert_approx_eq!(tst_rv_a.alpha, alpha, 1e-1);
+            assert_approx_eq!(tst_rv_a.beta, beta, 1e-1);
+
+            // sample from fitted beta dist
+            let samples = tst_rv_a.sample(ns, None);
+            let abs_tol = 6e-2*(upper_b-lower_b);
+            assert_approx_eq!(samples.mean().unwrap(), out.mean().unwrap(), abs_tol);
+            assert_approx_eq!(samples.std(0.0), out.std(0.0), abs_tol);
+        }
+    }
+
+    #[test]
+    fn test_uniform_rv() {
+        // uniform rv is Beta with params (1, 1)
+        let tst_rv_a = BetaRv::new(1.0, 1.0, 0.0, 1.0);
+        let samples = tst_rv_a.sample(10000, None);
+        assert_approx_eq!(samples.mean().unwrap(), 0.5, 1e-2);
     }
 
     #[test]
