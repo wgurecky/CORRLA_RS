@@ -64,11 +64,11 @@ impl DMDc {
     /// Computes DMD modes
     fn _calc_dmdc_modes(&mut self) {
         // compute SVD of input space
-        let (u_til, s_til, v_til) = random_svd(self.omega, self.n_modes, 10, 10);
+        let (u_til, s_til, v_til) = random_svd(self.omega.as_ref(), self.n_modes, 10, 10);
 
         let u_til_1 = u_til.as_ref().submatrix(
             0, 0, self.n_x, u_til.ncols());
-        let u_til_2 = _t_til.as_ref().submatrix(
+        let u_til_2 = u_til.as_ref().submatrix(
             self.n_x, 0,
             u_til.nrows()-self.n_x, u_til.ncols());
 
@@ -79,27 +79,27 @@ impl DMDc {
         let a_til =
             u_hat.transpose()
             * (self._Y()
-            * (v_til
+            * (v_til.as_ref()
             * (s_til.qr().inverse()
-            * (u_til_1.transpose() * u_hat))));
+            * (u_til_1.transpose() * u_hat.as_ref()))));
 
         // from eq 30 in Proctor. et. al DMDc
         let b_til =
             u_hat.transpose()
             * (self._Y()
-            * (v_til
+            * (v_til.as_ref()
             * (s_til.qr().inverse()
             * (u_til_2.transpose()))));
-        self._basis = Some(u_hat);
+        self._basis = Some(u_hat.clone());
         self._A = Some(a_til);
-        self._B = Some(u_hat*b_til);
+        self._B = Some(u_hat.as_ref()*b_til);
 
         self._calc_modes(v_til.as_ref(), s_til.as_ref(), u_til_1.as_ref(), u_hat.as_ref())
     }
 
     /// Computes eigenvalues and eigenvectors of a_tilde
     fn _calc_eigs(&self) -> (Mat<f64>, Mat<f64>) {
-        let ev = (self._A).unwrap().eigendecomposition::<f64>();
+        let ev = (self._A.as_ref()).unwrap().eigendecomposition::<f64>();
         let a_til_eigenvectors = ev.u();
         let a_til_eigenvalues = ev.s_diagonal().as_2d();
         (a_til_eigenvalues.to_owned(), a_til_eigenvectors.to_owned())
@@ -138,8 +138,10 @@ impl DMDc {
         assert_eq!(u_input.nrows(), self.n_u);
         assert_eq!(u_input.ncols(), 1);
         // reconstrut A from eigendecomposition
-        let a_til = self.modes.unwrap() *  self.lambdas.unwrap() * mat_pinv(self.modes.unwrap().as_ref());
-        let next_x = a_til * x_0 + self._B.unwrap() * u_input;
+        let a_til = self.modes.as_ref().unwrap() *
+                    self.lambdas.as_ref().unwrap() *
+                    mat_pinv(self.modes.as_ref().unwrap().as_ref());
+        let next_x = a_til * x_0 + self._B.as_ref().unwrap() * u_input;
         next_x
     }
 
@@ -151,7 +153,9 @@ impl DMDc {
         assert_eq!(x_0.ncols(), 1);
         assert_eq!(u_seq.nrows(), self.n_u);
         // reconstrut A from eigendecomposition
-        let a_til = self.modes.unwrap() *  self.lambdas.unwrap() * mat_pinv(self.modes.unwrap().as_ref());
+        let a_til = self.modes.as_ref().unwrap() *
+                    self.lambdas.as_ref().unwrap() *
+                    mat_pinv(self.modes.as_ref().unwrap().as_ref());
 
         // storage
         let mut x_cur = x_0;
@@ -159,10 +163,10 @@ impl DMDc {
         let mut x_out = faer::Mat::zeros(self.n_x, u_seq.ncols());
 
         // step the dynamics forward, for each u in u_input
-        let j = 0;
+        let mut j = 0;
         let col_iter = u_seq.col_chunks(1);
         for u_input in col_iter {
-            next_x = a_til * x_cur + self._B.unwrap() * u_input;
+            next_x = a_til.as_ref() * x_cur + self._B.as_ref().unwrap() * u_input;
             for i in 0..self.n_x {
                 x_out.write(i, j, next_x.read(i, 0));
             }
