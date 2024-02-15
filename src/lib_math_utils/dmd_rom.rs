@@ -27,29 +27,28 @@ pub struct DMDc {
     // number of DMD modes to compute and store for reconstructing output
     n_modes: usize,
     // times at which snapshots were collected
-    t_abscissa: Mat<f64>,
+    dt_snapshots: f64,
     // input space,
     omega: Mat<f64>,
     // DMD mode weight storage (similar to eig vals)
     lambdas: Option<Mat<f64>>,
     // DMD mode storage (similar to eigenvecs)
     modes: Option<Mat<f64>>,
-    // DMD mode weight storage (similar to eig vals)
     _basis: Option<Mat<f64>>,
-    // DMD mode storage (similar to eigenvecs)
+    // DMD operator storage
     _B: Option<Mat<f64>>,
     _A: Option<Mat<f64>>,
 }
 
 
 impl DMDc {
-    pub fn new(x_data: MatRef<f64>, u_data: MatRef<f64>, t: MatRef<f64>, n_modes: usize) -> Self {
+    pub fn new(x_data: MatRef<f64>, u_data: MatRef<f64>, dt: f64, n_modes: usize, n_iters: usize) -> Self {
         let mut dmdc_inst = Self {
             n_snapshots: x_data.ncols(),
             n_x: x_data.nrows(),
             n_u: u_data.nrows(),
             n_modes: n_modes,
-            t_abscissa: t.to_owned(),
+            dt_snapshots: dt,
             omega: mat_vstack(x_data, u_data),
             lambdas: None,
             modes: None,
@@ -57,14 +56,14 @@ impl DMDc {
             _B: None,
             _A: None,
         };
-        dmdc_inst._calc_dmdc_modes();
+        dmdc_inst._calc_dmdc_modes(n_iters);
         dmdc_inst
     }
 
     /// Computes DMD modes
-    fn _calc_dmdc_modes(&mut self) {
+    fn _calc_dmdc_modes(&mut self, n_iters: usize) {
         // compute SVD of input space
-        let (u_til, s_til, v_til) = random_svd(self.omega.as_ref(), self.n_modes, 10, 10);
+        let (u_til, s_til, v_til) = random_svd(self.omega.as_ref(), self.n_modes, n_iters, 8);
 
         let u_til_1 = u_til.as_ref().submatrix(
             0, 0, self.n_x, u_til.ncols());
@@ -73,7 +72,7 @@ impl DMDc {
             u_til.nrows()-self.n_x, u_til.ncols());
 
         // compute SVD of output space
-        let (u_hat, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, 10, 10);
+        let (u_hat, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 8);
 
         // from eq 29 in Proctor. et. al DMDc
         let a_til =
