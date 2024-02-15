@@ -74,6 +74,9 @@ impl DMDc {
         // compute SVD of output space
         let (u_hat, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 8);
 
+
+        println!("s_til shape: {:?}, {:?}", s_til.nrows(), s_til.ncols());
+
         // from eq 29 in Proctor. et. al DMDc
         let a_til =
             u_hat.transpose()
@@ -175,5 +178,56 @@ impl DMDc {
         }
 
         x_out
+    }
+}
+
+#[cfg(test)]
+mod dmd_unit_tests {
+    // bring everything from above (parent) module into scope
+    use super::*;
+
+    #[test]
+    fn test_dmdc() {
+        let nx = 100;
+        let x_points = mat_linspace::<f64>(0.0, 10.0, nx);
+        let nt = 40;
+        let n_snapshots = 40;
+        let t_points = mat_linspace::<f64>(0.0, 10.0, nt);
+
+        // build control input sequence
+        let u_seq: Vec<_> = t_points.col_as_slice(0).into_iter().map(
+            |t| {
+                if t < &5.0 {
+                    0.5
+                }
+                else {
+                    -0.5
+                }
+            }
+            ).collect();
+        let u_mat = mat_from_vec(&u_seq);
+        let u_mat = u_mat.as_ref().transpose();
+
+        // build snapshots.
+        // Exponential growth and decaying oscillations
+        let mut p_snapshots: Mat<f64> = faer::Mat::zeros(nx, n_snapshots);
+        for n in 0..n_snapshots {
+            let t = t_points[(n, 0)];
+            let u = u_seq[n];
+            for i in 0..x_points.nrows() {
+                let x = x_points.read(i, 0);
+                let p = x.sin() * t.sin() * (u*t).exp();
+                p_snapshots.write(i, n, p);
+            }
+        }
+        // check data shapes
+        println!("x_data shape: {:?}, {:?}", p_snapshots.nrows(), p_snapshots.ncols());
+        println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
+
+        // build DMDc model
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, 8, 10);
+
+        // test the DMDc model
+        //
     }
 }
