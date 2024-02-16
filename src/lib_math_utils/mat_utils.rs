@@ -296,6 +296,37 @@ pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     out_mat
 }
 
+
+/// converts a row vector to a diagnoal matrix
+pub fn mat_rowvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut out_mat = faer::Mat::zeros(vec.ncols(), vec.ncols());
+    for i in 0..vec.ncols() {
+        out_mat.write(i, i, vec.read(0, i));
+    }
+    out_mat
+}
+
+/// pseudo inv of diag matrix
+pub fn mat_pinv_diag<T>(diag_mat: MatRef<T>) -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut out_mat = faer::Mat::zeros(diag_mat.nrows(), diag_mat.ncols());
+    for i in 0..diag_mat.ncols() {
+        let tmp_val = diag_mat.read(i, i);
+        if tmp_val < T::from(1.0e-30).unwrap() && tmp_val > T::from(-1.0e-30).unwrap() {
+            out_mat.write(i, i, T::from(0.0).unwrap());
+        }
+        else {
+            out_mat.write(i, i, T::from(1.0).unwrap() / tmp_val);
+        }
+    }
+    out_mat
+}
+
 /// create a owned Vec from row, results in data copy
 pub fn mat_row_to_vec<T>(a_mat: MatRef<T>, row: usize) -> Vec<T>
     where
@@ -691,5 +722,63 @@ mod mat_utils_unit_tests {
             [1.0, 9.0],
             [4.0, 16.0],];
         mat_mat_approx_eq(res.as_ref(), expected.as_ref(), 1.0e-12f64);
+    }
+
+    #[test]
+    fn test_mat_colvec_to_diag() {
+        let a_tst = faer::mat![
+            [1.0],
+            [2.0],
+            [3.0],
+            [4.0],];
+        let a_diag_mat = mat_colvec_to_diag(a_tst.as_ref());
+        let expected = faer::mat![
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],];
+        mat_mat_approx_eq(expected.as_ref(), a_diag_mat.as_ref(), 1.0e-12f64);
+    }
+
+    #[test]
+    fn test_mat_rowvec_to_diag() {
+        let a_tst = faer::mat![
+            [1.0, 2.0, 3.0, 4.0],];
+        let a_diag_mat = mat_rowvec_to_diag(a_tst.as_ref());
+        let expected = faer::mat![
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],];
+        mat_mat_approx_eq(expected.as_ref(), a_diag_mat.as_ref(), 1.0e-12f64);
+    }
+
+    #[test]
+    fn test_mat_pinv_diag() {
+        let a_mat = faer::mat![
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],];
+        let inv_a = mat_pinv_diag(a_mat.as_ref());
+        let expected = faer::mat![
+            [1.0 / 1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0 / 2.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0 / 3.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0 / 4.0],];
+        mat_mat_approx_eq(expected.as_ref(), inv_a.as_ref(), 1.0e-12f64);
+
+        let a_mat = faer::mat![
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],];
+        let inv_a = mat_pinv_diag(a_mat.as_ref());
+        let expected = faer::mat![
+            [1.0 / 1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0 / 2.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0 / 3.0, 0.0],
+            [0.0, 0.0, 0.0,       0.0],];
+        mat_mat_approx_eq(expected.as_ref(), inv_a.as_ref(), 1.0e-12f64);
     }
 }
