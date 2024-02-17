@@ -21,6 +21,7 @@ argmin-math = "*"
 finitediff = {version="0.1.4", features = ["ndarray"]}
 rand_distr = "*"
 num-traits = "*"
+num-complex = "*"
 ndarray = {version=">=0.15.6", features=["rayon"]}
 nalgebra = "*"
 faer = {version = "0.16.0", features = ["ndarray"]}
