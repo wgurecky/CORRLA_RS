@@ -67,11 +67,13 @@ impl DMDc {
     /// Computes DMD modes
     fn _calc_dmdc_modes(&mut self, n_iters: usize) {
         // compute SVD of input space
-        // let (u_til_rsvd, s_til_rsvd, v_til_rsvd) = random_svd(self._X(), self.n_modes, n_iters, 12);
-        let (u_til, s_til, v_til_) = mat_truncated_svd(self._X(), self.n_modes);
+        // let (u_til, s_til, v_til_) = mat_truncated_svd(self._X(), self.n_modes);
+        // println!("u_til_exact: {:?}, v_til_exact: {:?}", u_til, v_til_);
+        let (u_til, s_til, v_til_) = random_svd(self._X(), self.n_modes, n_iters, 8);
+        // println!("u_til_rsvd: {:?}, v_til_rsvd: {:?}", u_til, v_til_);
 
         // let v_til = v_til_.transpose().to_owned();
-        let v_til = v_til_.to_owned();
+        let v_til = v_til_.transpose().to_owned();
 
         let u_til_1 = u_til.as_ref().submatrix(
             0, 0, self.n_x, u_til.ncols());
@@ -80,10 +82,10 @@ impl DMDc {
             self.n_u, u_til.ncols());
 
         // compute SVD of output space
-        // let (u_hat_rsvd, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 12);
-        let (u_hat, _s_hat, _v_hat) = mat_truncated_svd(self._Y(), self.n_modes);
+        let (u_hat, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 12);
+        // let (u_hat, _s_hat, _v_hat) = mat_truncated_svd(self._Y(), self.n_modes);
 
-
+        // compute inv of diag singular val mat
         let s_til_diag = mat_colvec_to_diag(s_til.as_ref());
         let s_til_inv = mat_pinv_diag(s_til_diag.as_ref());
 
@@ -266,8 +268,8 @@ mod dmd_unit_tests {
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let n_modes = 3;
-        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 4);
+        let n_modes = 4;
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 8);
 
         // test the DMDc model
         let estimated_a_op = dmdc_model.est_a_til();

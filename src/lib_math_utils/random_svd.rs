@@ -96,7 +96,7 @@ pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_overs
     // A^T = V^T * S^T * U^T
     if fat == true {
         (
-         my_rsvd.v().transpose().get(.., 0..omega_rank).to_owned(),
+         my_rsvd.v().get(.., 0..omega_rank).to_owned(),
          my_rsvd.s_diagonal().get(0..omega_rank, ..).to_owned(),
          u.transpose().get(0..omega_rank, ..).to_owned(),
         )
