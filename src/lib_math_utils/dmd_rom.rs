@@ -266,7 +266,8 @@ mod dmd_unit_tests {
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, 3, 4);
+        let n_modes = 3;
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 4);
 
         // test the DMDc model
         let estimated_a_op = dmdc_model.est_a_til();
@@ -285,7 +286,7 @@ mod dmd_unit_tests {
 
         // get the 20th snapshot (true data)
         let p20_expected = p_snapshots.as_ref().submatrix(
-            0, 1,
+            0, 20,
             p_snapshots.nrows(), 1
             );
         println!("Expected: {:?}", p20_expected);
@@ -293,10 +294,12 @@ mod dmd_unit_tests {
         // get the 19th predicted state (estimated data),
         // 0th state was supplied as initial condition so offset is needed
         let p20_predicted = p_predicted.as_ref().submatrix(
-            0, 0,
+            0, 19,
             p_snapshots.nrows(), 1
             );
         println!("Predicted: {:?}", p20_predicted);
         println!("DMDc Eigs: {:?}", dmdc_model.lambdas.as_ref());
+        assert_eq!(dmdc_model.lambdas.unwrap().nrows(), n_modes);
+        mat_mat_approx_eq(p20_predicted.as_ref(), p20_expected.as_ref(), 1e-3);
     }
 }
