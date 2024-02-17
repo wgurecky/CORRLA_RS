@@ -9,10 +9,10 @@ from pydmd.dmdc import DMDc
 
 
 def build_snapshots():
-    nx = 100
+    nx = 20
     nt = 40
-    x_points = np.linspace(0., 10., nx)
-    t_points = np.linspace(0., 10., nt)
+    x_points = np.linspace(0., 9.5, nx)
+    t_points = np.linspace(0., 9.75, nt)
 
     # control input
     u_seq = np.ones((1, len(t_points)))
@@ -74,13 +74,14 @@ def predict_dmdc(pydmdc_model: DMDc, x0, u_seq):
 
 def fit_pydmd():
     p_snapshots, u_seq = build_snapshots()
-    pydmdc_model = DMDc(svd_rank=8, svd_rank_omega=8)
+    pydmdc_model = DMDc(svd_rank=3, svd_rank_omega=3)
     # pydmdc_model = DMDc()
     pydmdc_model.fit(p_snapshots, u_seq[:, 1:])
 
     # check reduced rank ops
     print("pydmdc _A til: ", pydmdc_model._Atilde._Atilde)
     print("pydmdc _B til: ", pydmdc_model._B)
+    # print("pydmdc _basis: ", pydmdc_model._basis)
     # check eigs
     print("pydmdc eigs: ", pydmdc_model.eigs)
     # check modes

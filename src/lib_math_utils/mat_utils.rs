@@ -6,6 +6,7 @@
 use num_traits::Float;
 use faer::{prelude::*, IntoNdarray};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer_core::{c64, c32};
 use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
 use rayon::prelude::*;
@@ -46,6 +47,32 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
                         (s_vec.read(i, 0) + eps));
     }
     v * s_inv_mat * u.transpose()
+}
+
+/// Compute the Moore-Penrose inverse for complex
+pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
+{
+    let x_svd = x.svd();
+    let u = x_svd.u();
+    let eps = c64::new(1.0e-16, 1.0e-16);
+    let comp_one = c64::new(1.0, 0.0);
+    let s_vec = x_svd.s_diagonal();
+    let v = x_svd.v();
+    let mut s_inv_mat: Mat<c64> = faer::Mat::zeros(x.ncols(), x.nrows());
+    for i in 0..s_vec.nrows(){
+        s_inv_mat.write(i, i, comp_one /
+                        (s_vec.read(i, 0) + eps));
+    }
+    v * s_inv_mat * u.adjoint()
+}
+
+/// Truncated SVD
+pub fn mat_truncated_svd(my_mat: MatRef<f64>, rank: usize) -> (Mat<f64>, Mat<f64>, Mat<f64>) {
+    let my_svd = my_mat.svd();
+    let u_r = my_svd.u().get(.., 0..rank).to_owned();
+    let s_r = my_svd.s_diagonal().get(0..rank, ..).to_owned();
+    let v_r = my_svd.v().get(.., 0..rank).to_owned();
+    (u_r, s_r, v_r)
 }
 
 
@@ -283,11 +310,35 @@ pub fn mat_col_mod<T>(mut out_mat: MatMut<T>, col: usize, vec: MatRef<T>)
     }
 }
 
+/// combine real and imag components into complex mat
+pub fn mat_complex_from_parts(a_re: MatRef<f64>, a_im: MatRef<f64>) -> Mat<c64> {
+    let mut out_mat: Mat<c64> = faer::Mat::zeros(a_re.nrows(), a_re.ncols());
+    for i in 0..out_mat.nrows() {
+        for j in 0..out_mat.ncols() {
+            out_mat.write(i, j, c64::new(a_re.read(i, j), a_im.read(i, j)));
+        }
+    }
+    out_mat
+}
+
+/// split real and imag components from complex mat
+pub fn mat_parts_from_complex(a_comp: MatRef<c64>) -> (Mat<f64>, Mat<f64>) {
+    let mut re_mat: Mat<f64> = faer::Mat::zeros(a_comp.nrows(), a_comp.ncols());
+    let mut im_mat: Mat<f64> = faer::Mat::zeros(a_comp.nrows(), a_comp.ncols());
+    for i in 0..re_mat.nrows() {
+        for j in 0..re_mat.ncols() {
+            re_mat.write(i, j, a_comp.read(i, j).re);
+            im_mat.write(i, j, a_comp.read(i, j).im);
+        }
+    }
+    (re_mat, im_mat)
+}
+
 
 /// converts a col vector to a diagnoal matrix
 pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer_core::ComplexField
 {
     let mut out_mat = faer::Mat::zeros(vec.nrows(), vec.nrows());
     for i in 0..vec.nrows() {
@@ -314,15 +365,11 @@ pub fn mat_pinv_diag<T>(diag_mat: MatRef<T>) -> Mat<T>
     where
     T: faer_core::RealField + Float
 {
+    let eps = T::from(1.0e-20).unwrap();
     let mut out_mat = faer::Mat::zeros(diag_mat.nrows(), diag_mat.ncols());
     for i in 0..diag_mat.ncols() {
-        let tmp_val = diag_mat.read(i, i);
-        if tmp_val < T::from(1.0e-30).unwrap() && tmp_val > T::from(-1.0e-30).unwrap() {
-            out_mat.write(i, i, T::from(0.0).unwrap());
-        }
-        else {
-            out_mat.write(i, i, T::from(1.0).unwrap() / tmp_val);
-        }
+        let tmp_val = diag_mat.read(i, i) + eps;
+        out_mat.write(i, i, T::from(1.0).unwrap() / tmp_val);
     }
     out_mat
 }
@@ -778,7 +825,7 @@ mod mat_utils_unit_tests {
             [1.0 / 1.0, 0.0, 0.0, 0.0],
             [0.0, 1.0 / 2.0, 0.0, 0.0],
             [0.0, 0.0, 1.0 / 3.0, 0.0],
-            [0.0, 0.0, 0.0,       0.0],];
+            [0.0, 0.0, 0.0,       1.0e20],];
         mat_mat_approx_eq(expected.as_ref(), inv_a.as_ref(), 1.0e-12f64);
     }
 }

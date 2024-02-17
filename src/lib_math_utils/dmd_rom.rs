@@ -33,8 +33,7 @@ pub struct DMDc {
     // input space,
     omega: Mat<f64>,
     // DMD mode weight storage (similar to eig vals)
-    lambdas_re: Option<Mat<f64>>,
-    lambdas_im: Option<Mat<f64>>,
+    lambdas: Option<Mat<c64>>,
     // DMD mode storage (similar to eigenvecs)
     modes_re: Option<Mat<f64>>,
     modes_im: Option<Mat<f64>>,
@@ -54,8 +53,7 @@ impl DMDc {
             n_modes: n_modes,
             dt_snapshots: dt,
             omega: mat_vstack(x_data, u_data),
-            lambdas_re: None,
-            lambdas_im: None,
+            lambdas: None,
             modes_re: None,
             modes_im: None,
             _basis: None,
@@ -69,16 +67,21 @@ impl DMDc {
     /// Computes DMD modes
     fn _calc_dmdc_modes(&mut self, n_iters: usize) {
         // compute SVD of input space
-        let (u_til, s_til, v_til) = random_svd(self._X(), self.n_modes, n_iters, 12);
+        // let (u_til_rsvd, s_til_rsvd, v_til_rsvd) = random_svd(self._X(), self.n_modes, n_iters, 12);
+        let (u_til, s_til, v_til_) = mat_truncated_svd(self._X(), self.n_modes);
+
+        // let v_til = v_til_.transpose().to_owned();
+        let v_til = v_til_.to_owned();
 
         let u_til_1 = u_til.as_ref().submatrix(
             0, 0, self.n_x, u_til.ncols());
         let u_til_2 = u_til.as_ref().submatrix(
             self.n_x, 0,
-            u_til.nrows()-self.n_x, u_til.ncols());
+            self.n_u, u_til.ncols());
 
         // compute SVD of output space
-        let (u_hat, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 12);
+        // let (u_hat_rsvd, _s_hat, _v_hat) = random_svd(self._Y(), self.n_modes, n_iters, 12);
+        let (u_hat, _s_hat, _v_hat) = mat_truncated_svd(self._Y(), self.n_modes);
 
 
         let s_til_diag = mat_colvec_to_diag(s_til.as_ref());
@@ -86,19 +89,20 @@ impl DMDc {
 
         // from eq 29 in Proctor. et. al DMDc
         let a_til =
-            u_hat.as_ref().adjoint()
-            * (self._Y()
-            * (v_til.adjoint().as_ref()
-            * (s_til_inv.as_ref()
-            * (u_til_1.adjoint() * u_hat.as_ref()))));
+            u_hat.as_ref().transpose()
+            * self._Y()
+            * v_til.as_ref()
+            * s_til_inv.as_ref()
+            * u_til_1.transpose() * u_hat.as_ref();
 
         // from eq 30 in Proctor. et. al DMDc
         let b_til: Mat<f64> =
-            u_hat.as_ref().adjoint()
-            * (self._Y()
-            * (v_til.adjoint().as_ref()
-            * (s_til_inv.as_ref()
-            * (u_til_2.adjoint()))));
+            u_hat.as_ref().transpose()
+            * self._Y()
+            * v_til.as_ref()
+            * s_til_inv.as_ref()
+            * u_til_2.transpose();
+        //
         self._basis = Some(u_hat.clone());
         self._A = Some(a_til);
         self._B = Some(u_hat.as_ref()*b_til);
@@ -107,56 +111,38 @@ impl DMDc {
     }
 
     /// Computes eigenvalues and eigenvectors of a_tilde
-    fn _calc_eigs(&self) -> (Mat<f64>, Mat<f64>, Mat<f64>, Mat<f64>) {
+    fn _calc_eigs(&self) -> (Mat<c64>, Mat<f64>, Mat<f64>) {
         //let ev: Eigendecomposition<c64> = Eigendecomposition::new_from_real(
         //    self._A.as_ref().unwrap().as_ref());
         let ev: Eigendecomposition<c64> = (self._A.as_ref()).unwrap().eigendecomposition();
         let a_til_eigenvectors = ev.u();
-        // convert to real
-        let mut a_til_eigenvectors_re = faer::Mat::zeros(
-            a_til_eigenvectors.nrows(), a_til_eigenvectors.ncols());
-        let mut a_til_eigenvectors_im = faer::Mat::zeros(
-            a_til_eigenvectors.nrows(), a_til_eigenvectors.ncols());
-        for i in 0..a_til_eigenvectors.nrows() {
-            for j in 0..a_til_eigenvectors.ncols() {
-                a_til_eigenvectors_re.write(i, j, a_til_eigenvectors.read(i, j).re);
-                a_til_eigenvectors_im.write(i, j, a_til_eigenvectors.read(i, j).im);
-            }
-        }
         let a_til_eigenvalues = ev.s_diagonal().as_2d();
-        let mut a_til_eigenvalues_re = faer::Mat::zeros(
-            a_til_eigenvalues.nrows(), a_til_eigenvalues.ncols());
-        let mut a_til_eigenvalues_im = faer::Mat::zeros(
-            a_til_eigenvalues.nrows(), a_til_eigenvalues.ncols());
-        for i in 0..a_til_eigenvalues.nrows() {
-            for j in 0..a_til_eigenvalues.ncols() {
-                a_til_eigenvalues_re.write(i, j, a_til_eigenvalues.read(i, j).re);
-                a_til_eigenvalues_im.write(i, j, a_til_eigenvalues.read(i, j).im);
-            }
-        }
+        // convert to real and imag components
+        let (a_til_eigenvectors_re, a_til_eigenvectors_im) =
+            mat_parts_from_complex(a_til_eigenvectors);
 
-        (a_til_eigenvalues_re.to_owned(), a_til_eigenvectors_re.to_owned(), a_til_eigenvalues_im.to_owned(), a_til_eigenvectors_im.to_owned())
+        (a_til_eigenvalues.to_owned(),
+         a_til_eigenvectors_re.to_owned(),
+         a_til_eigenvectors_im.to_owned())
     }
 
     /// Computes DMD modes
     fn _calc_modes(&mut self, v_til: MatRef<f64>, s_til: MatRef<f64>, u_til_1: MatRef<f64>, u_hat: MatRef<f64>) {
-        let (lambdas, w, lambdas_im, w_im) = self._calc_eigs();
-        let lambdas_re_diag: Mat<f64> = mat_colvec_to_diag(lambdas.as_ref());
-        let lambdas_im_diag: Mat<f64> = mat_colvec_to_diag(lambdas_im.as_ref());
-        self.lambdas_re = Some(lambdas_re_diag);
-        self.lambdas_im = Some(lambdas_im_diag);
+        let (lambdas, w_re, w_im) = self._calc_eigs();
+        let lambdas_diag: Mat<c64> = mat_colvec_to_diag(lambdas.as_ref());
+        self.lambdas = Some(lambdas_diag);
         // from eq 36 in Proctor. et. al DMDc
         // BUT we only need the real part of the modes, since
         // when we recombine with
         self.modes_re = Some(
             self._Y()
-            * ( v_til.transpose()
+            * (v_til
             * (mat_pinv_diag(s_til)
             * (u_til_1.transpose()
-            * (u_hat * w.as_ref())))));
+            * (u_hat * w_re.as_ref())))));
         self.modes_im = Some(
             self._Y()
-            * ( v_til.transpose()
+            * (v_til
             * (mat_pinv_diag(s_til)
             * (u_til_1.transpose()
             * (u_hat * w_im.as_ref())))));
@@ -181,13 +167,14 @@ impl DMDc {
     /// Estimated A operator by eigendecomp
     pub fn est_a_til(&self) -> Mat<f64> {
         // build temp complex matricies from real/imag components
-        let a_til_re = self.modes_re.as_ref().unwrap() *
-                    self.lambdas_re.as_ref().unwrap() *
-                    mat_pinv(self.modes_re.as_ref().unwrap().as_ref());
-        let a_til_im = self.modes_im.as_ref().unwrap() *
-                    self.lambdas_im.as_ref().unwrap() *
-                    mat_pinv(self.modes_im.as_ref().unwrap().as_ref());
-        a_til_re - a_til_im
+        let modes_comp = mat_complex_from_parts(
+            self.modes_re.as_ref().unwrap().as_ref(),
+            self.modes_im.as_ref().unwrap().as_ref());
+        let a_til_comp = modes_comp.as_ref() *
+                    self.lambdas.as_ref().unwrap() *
+                    mat_pinv_comp(modes_comp.as_ref());
+        let (atil_re, _atil_im) = mat_parts_from_complex(a_til_comp.as_ref());
+        atil_re
     }
 
     /// Estimated B operator
@@ -248,7 +235,7 @@ mod dmd_unit_tests {
 
     #[test]
     fn test_dmdc() {
-        let nx = 100;
+        let nx = 20;
         let x_points = mat_linspace::<f64>(0.0, 10.0, nx);
         let nt = 40;
         let n_snapshots = nt.clone();
@@ -273,12 +260,13 @@ mod dmd_unit_tests {
                 p_snapshots.write(i, n, p);
             }
         }
+        // println!("p_snapshots: {:?}", p_snapshots.as_ref());
         // check data shapes
         println!("x_data shape: {:?}, {:?}", p_snapshots.nrows(), p_snapshots.ncols());
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, 4, 20);
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, 3, 4);
 
         // test the DMDc model
         let estimated_a_op = dmdc_model.est_a_til();
@@ -297,7 +285,7 @@ mod dmd_unit_tests {
 
         // get the 20th snapshot (true data)
         let p20_expected = p_snapshots.as_ref().submatrix(
-            0, 20,
+            0, 1,
             p_snapshots.nrows(), 1
             );
         println!("Expected: {:?}", p20_expected);
@@ -305,9 +293,10 @@ mod dmd_unit_tests {
         // get the 19th predicted state (estimated data),
         // 0th state was supplied as initial condition so offset is needed
         let p20_predicted = p_predicted.as_ref().submatrix(
-            0, 20,
+            0, 0,
             p_snapshots.nrows(), 1
             );
         println!("Predicted: {:?}", p20_predicted);
+        println!("DMDc Eigs: {:?}", dmdc_model.lambdas.as_ref());
     }
 }
