@@ -67,7 +67,10 @@ pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
 }
 
 /// Truncated SVD
-pub fn mat_truncated_svd(my_mat: MatRef<f64>, rank: usize) -> (Mat<f64>, Mat<f64>, Mat<f64>) {
+pub fn mat_truncated_svd<T>(my_mat: MatRef<T>, rank: usize) -> (Mat<T>, Mat<T>, Mat<T>)
+    where
+    T: faer_core::RealField + Float
+{
     let my_svd = my_mat.svd();
     let u_r = my_svd.u().get(.., 0..rank).to_owned();
     let s_r = my_svd.s_diagonal().get(0..rank, ..).to_owned();

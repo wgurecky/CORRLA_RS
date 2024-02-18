@@ -105,7 +105,7 @@ pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_overs
         (
          u.get(.., 0..omega_rank).to_owned(),
          my_rsvd.s_diagonal().get(0..omega_rank, ..).to_owned(),
-         my_rsvd.v().get(0..omega_rank, ..).to_owned()
+         my_rsvd.v().get(.., 0..omega_rank).transpose().to_owned()
         )
     }
 }

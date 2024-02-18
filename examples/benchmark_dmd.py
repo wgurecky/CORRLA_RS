@@ -9,13 +9,13 @@ from pydmd.dmdc import DMDc
 
 
 def build_snapshots():
-    nx = 20
-    nt = 40
-    x_points = np.linspace(0., 9.5, nx)
-    t_points = np.linspace(0., 9.75, nt)
+    nx = 20000
+    nt = 200
+    x_points = np.linspace(0., 9.5, nx, dtype=np.float32)
+    t_points = np.linspace(0., 9.75, nt, dtype=np.float32)
 
     # control input
-    u_seq = np.ones((1, len(t_points)))
+    u_seq = np.ones((1, len(t_points)), dtype=np.float32)
     def u_fn(t):
         return 0.2
     for i, t in enumerate(t_points):
