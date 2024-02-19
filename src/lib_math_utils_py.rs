@@ -82,6 +82,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
     // Add classes to module
     m.add_class::<PyRbfInterp>()?;
     m.add_class::<PyPodI>()?;
+    m.add_class::<PyDMDc>()?;
 
     Ok(())
 }

@@ -4,8 +4,12 @@ and PyDMD on a DMDc problem
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 import pydmd
 from pydmd.dmdc import DMDc
+
+# corrla imports
+from corrla_rs import PyDMDc
 
 
 def build_snapshots():
@@ -75,8 +79,11 @@ def predict_dmdc(pydmdc_model: DMDc, x0, u_seq):
 def fit_pydmd():
     p_snapshots, u_seq = build_snapshots()
     n_modes = 12
+    ti = time.time()
     pydmdc_model = DMDc(svd_rank=n_modes, svd_rank_omega=n_modes)
     pydmdc_model.fit(p_snapshots, u_seq[:, 1:])
+    tf = time.time()
+    print("PyDMD Fit time: ", tf - ti)
 
     # check reduced rank ops
     #print("pydmdc _A til: ", pydmdc_model._Atilde._Atilde)
@@ -97,6 +104,22 @@ def fit_pydmd():
     print("pydmdc expected: ", p_snapshots[:, 20])
 
 
+def fit_corrla_dmd():
+    p_snapshots, u_seq = build_snapshots()
+    n_modes = 12
+    n_iters = 10
+    ti = time.time()
+    rust_dmdc = PyDMDc(p_snapshots, u_seq, n_modes, n_iters)
+    tf = time.time()
+    print("Corrla DMDc Fit time: ", tf - ti)
+
+    x0 = p_snapshots[:, 0:1]
+    u_s = u_seq[:, 1:]
+    predicted = rust_dmdc.predict(x0, u_s)
+    print("corrla dmdc predicted: ", predicted[:, 20])
+    print("corrla dmdc expected: ", p_snapshots[:, 20])
+
 
 if __name__ == "__main__":
     fit_pydmd()
+    fit_corrla_dmd()
