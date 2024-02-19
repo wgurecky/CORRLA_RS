@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 
 use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
 use faer::{prelude::*};
+use crate::lib_math_utils::dmd_rom::*;
 use crate::lib_math_utils::pod_rom::*;
 use crate::lib_math_utils::interp_utils::*;
 use crate::lib_math_utils::random_svd::*;
@@ -154,6 +155,39 @@ impl PyPodI {
         let t = t_np.as_array();
         let t_mat = t.view().into_faer();
         let y_eval = self.pod.predict(t_mat.as_ref());
+        let ndarray_y: Array2<f64> = y_eval.as_ref().into_ndarray().to_owned();
+        ndarray_y.into_pyarray(py).to_owned()
+    }
+}
+
+
+/// Python interface for rust DMDc impl
+#[pyclass(unsendable)]
+pub struct PyDMDc {
+    pub dmd: DMDc<'static>,
+}
+
+#[pymethods]
+impl PyDMDc {
+    #[new]
+    pub fn new(x_np: PyReadonlyArray2<f64>, u_np: PyReadonlyArray2<f64>, n_modes: usize, n_iters: usize) -> Self
+    {
+        let x = x_np.as_array();
+        let x_mat = x.view().into_faer();
+        let u = u_np.as_array();
+        let u_mat = u.view().into_faer();
+        Self {
+            dmd: DMDc::new(x_mat.as_ref(), u_mat.as_ref(), 1.0, n_modes, n_iters),
+        }
+    }
+
+    pub fn predict(&self, py:Python<'_>, x0_np: PyReadonlyArray2<f64>, u_np: PyReadonlyArray2<f64>) -> Py<PyArray2<f64>>
+    {
+        let x0 = x0_np.as_array();
+        let x_mat = x0.view().into_faer();
+        let u = u_np.as_array();
+        let u_mat = u.view().into_faer();
+        let y_eval = self.dmd.predict_multiple(x_mat.as_ref(), u_mat.as_ref());
         let ndarray_y: Array2<f64> = y_eval.as_ref().into_ndarray().to_owned();
         ndarray_y.into_pyarray(py).to_owned()
     }
