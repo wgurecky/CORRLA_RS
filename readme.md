@@ -22,9 +22,31 @@ Correlation Analysis Methods
 - Pearson Correlation calc
 - R-squared Sensitivity analysis
 
+Interpolation and Response Surfaces
+
+- N-D Radial basis function interpolation
+- Gaussian process regression (TODO)
+
 Sampling Methods
 
-- TBD
+- Markov chain Monte Carlo (MCMC) samplers:
+  - Differential evolution MCMC (DEMC), parallel implementation.
+  - Differential evolution adaptive metropolis MCMC (DREAM), parallel implementation.
+- Multivariate (MV) distribution samplers:
+  - Dirichlet MV constrained sampler
+  - Others TBD
+
+Distribution Functions
+
+- Multivariate
+  - Bivariate Copula (TODO)
+    - Gaussian
+    - Frank
+    - Clayton
+    - Gumbel
+  - Pair-Copula constructions (Vine-Copula) (TODO)
+- Univariate
+  - TBD
 
 Package Build
 -------------

@@ -14,6 +14,7 @@ path = 'src/lib.rs'
 [dependencies]
 assert_approx_eq = "*"
 rand = "*"
+statrs = "*"
 rand_distr = "*"
 num-traits = "*"
 ndarray = "*"
