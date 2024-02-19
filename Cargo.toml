@@ -13,11 +13,15 @@ path = 'src/lib.rs'
 
 [dependencies]
 assert_approx_eq = "*"
-rand = "*"
+itertools = "*"
+rand = {version=">=0.8.5", featurs=["alloc"]}
 statrs = "*"
+argmin = {version=">=0.9.0"}
+argmin-math = "*"
+finitediff = {version="0.1.4", features = ["ndarray"]}
 rand_distr = "*"
 num-traits = "*"
-ndarray = "*"
+ndarray = {version=">=0.15.6", features=["rayon"]}
 nalgebra = "*"
 faer = {version = "0.16.0", features = ["ndarray"]}
 faer-core = "0.16.0"
