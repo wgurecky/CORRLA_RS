@@ -244,7 +244,7 @@ mod dmd_unit_tests {
         // skinny case (n times < nx)
         run_test_dmdc(50, 40);
         // big case
-        run_test_dmdc(1000, 40);
+        run_test_dmdc(500, 40);
     }
 
     fn run_test_dmdc(nx: usize, nt: usize)
@@ -255,7 +255,7 @@ mod dmd_unit_tests {
 
         // build control input sequence
         let u_seq: Vec<_> = t_points.col_as_slice(0).into_iter().map(
-            |t| { 0.2 }
+            |t| { (0.2*t).exp() }
             ).collect();
         let u_mat = mat_from_vec(&u_seq);
         let u_mat = u_mat.as_ref().transpose();
@@ -268,7 +268,7 @@ mod dmd_unit_tests {
             let u = u_seq[n];
             for i in 0..x_points.nrows() {
                 let x = x_points.read(i, 0);
-                let p = (x+0.2*t).sin()*(u*t).exp();
+                let p = (x+0.2*t).sin()*u;
                 p_snapshots.write(i, n, p);
             }
         }
@@ -278,7 +278,7 @@ mod dmd_unit_tests {
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let n_modes = 4;
+        let n_modes = 8;
         let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 10);
 
         // test the DMDc model

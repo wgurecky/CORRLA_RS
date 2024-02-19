@@ -9,21 +9,21 @@ from pydmd.dmdc import DMDc
 
 
 def build_snapshots():
-    nx = 20000
-    nt = 200
-    x_points = np.linspace(0., 9.5, nx, dtype=np.float32)
-    t_points = np.linspace(0., 9.75, nt, dtype=np.float32)
+    nx = 500
+    nt = 40
+    x_points = np.linspace(0., 9.5, nx, dtype=np.float64)
+    t_points = np.linspace(0., 9.75, nt, dtype=np.float64)
 
     # control input
-    u_seq = np.ones((1, len(t_points)), dtype=np.float32)
+    u_seq = np.ones((1, len(t_points)), dtype=np.float64)
     def u_fn(t):
-        return 0.2
+        return np.exp(0.2*t)+0.8*t
     for i, t in enumerate(t_points):
         u_seq[0, i] = u_fn(t)
 
     # response
     p_snapshots = []
-    p_fn = lambda x, t: np.sin(x+0.2*t)*np.exp(u_fn(t)*t)
+    p_fn = lambda x, t: (np.sin(0.2*x+0.2*t)**2.)*u_fn(t) + np.random.rand(len(x))*1e-1
     for t in t_points:
         p_snapshot = p_fn(x_points, t)
         p_snapshots.append(p_snapshot)
@@ -74,18 +74,18 @@ def predict_dmdc(pydmdc_model: DMDc, x0, u_seq):
 
 def fit_pydmd():
     p_snapshots, u_seq = build_snapshots()
-    pydmdc_model = DMDc(svd_rank=3, svd_rank_omega=3)
-    # pydmdc_model = DMDc()
+    n_modes = 12
+    pydmdc_model = DMDc(svd_rank=n_modes, svd_rank_omega=n_modes)
     pydmdc_model.fit(p_snapshots, u_seq[:, 1:])
 
     # check reduced rank ops
-    print("pydmdc _A til: ", pydmdc_model._Atilde._Atilde)
-    print("pydmdc _B til: ", pydmdc_model._B)
+    #print("pydmdc _A til: ", pydmdc_model._Atilde._Atilde)
+    #print("pydmdc _B til: ", pydmdc_model._B)
     # print("pydmdc _basis: ", pydmdc_model._basis)
     # check eigs
     print("pydmdc eigs: ", pydmdc_model.eigs)
     # check modes
-    print("pydmdc modes: ", pydmdc_model.modes)
+    #print("pydmdc modes: ", pydmdc_model.modes)
 
     # forecast
     predicted = predict_dmdc(pydmdc_model,

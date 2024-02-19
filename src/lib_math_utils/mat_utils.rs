@@ -371,8 +371,13 @@ pub fn mat_pinv_diag<T>(diag_mat: MatRef<T>) -> Mat<T>
     let eps = T::from(1.0e-20).unwrap();
     let mut out_mat = faer::Mat::zeros(diag_mat.nrows(), diag_mat.ncols());
     for i in 0..diag_mat.ncols() {
-        let tmp_val = diag_mat.read(i, i) + eps;
-        out_mat.write(i, i, T::from(1.0).unwrap() / tmp_val);
+        let tmp_val = diag_mat.read(i, i);
+        if tmp_val < eps && tmp_val > -eps {
+            out_mat.write(i, i, T::from(0.0).unwrap());
+        }
+        else {
+            out_mat.write(i, i, T::from(1.0).unwrap() / (tmp_val + eps));
+        }
     }
     out_mat
 }
@@ -828,7 +833,7 @@ mod mat_utils_unit_tests {
             [1.0 / 1.0, 0.0, 0.0, 0.0],
             [0.0, 1.0 / 2.0, 0.0, 0.0],
             [0.0, 0.0, 1.0 / 3.0, 0.0],
-            [0.0, 0.0, 0.0,       1.0e20],];
+            [0.0, 0.0, 0.0,       0.0],];
         mat_mat_approx_eq(expected.as_ref(), inv_a.as_ref(), 1.0e-12f64);
     }
 }
