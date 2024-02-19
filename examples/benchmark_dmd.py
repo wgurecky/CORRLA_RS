@@ -13,7 +13,7 @@ from corrla_rs import PyDMDc
 
 
 def build_snapshots():
-    nx = 500
+    nx = 5000
     nt = 40
     x_points = np.linspace(0., 9.5, nx, dtype=np.float64)
     t_points = np.linspace(0., 9.75, nt, dtype=np.float64)

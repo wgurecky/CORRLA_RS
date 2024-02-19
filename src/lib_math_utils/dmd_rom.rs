@@ -74,8 +74,6 @@ impl <'a> DMDc <'a> {
         // println!("u_til_exact: {:?}, v_til_exact: {:?}", u_til, v_til_);
         let (u_til, s_til, v_til_) = random_svd(self._X(omega.as_ref()), self.n_modes, n_iters, 8);
         let v_til = v_til_.transpose().to_owned();
-        // println!("u_til_rsvd: {:?}, v_til_rsvd: {:?}", u_til, v_til_);
-
 
         let u_til_1 = u_til.as_ref().submatrix(
             0, 0, self.n_x, u_til.ncols());
@@ -138,18 +136,18 @@ impl <'a> DMDc <'a> {
         // from eq 36 in Proctor. et. al DMDc
         // BUT we only need the real part of the modes, since
         // when we recombine with
+        let tmp_modes_scale =
+            self._Y(omega)
+            * (v_til
+            * (mat_pinv_diag(s_til)
+            * (u_til_1.transpose()
+            * (u_hat))));
         self.modes_re = Some(
-            self._Y(omega)
-            * (v_til
-            * (mat_pinv_diag(s_til)
-            * (u_til_1.transpose()
-            * (u_hat * w_re.as_ref())))));
+            tmp_modes_scale.as_ref()
+            * w_re.as_ref());
         self.modes_im = Some(
-            self._Y(omega)
-            * (v_til
-            * (mat_pinv_diag(s_til)
-            * (u_til_1.transpose()
-            * (u_hat * w_im.as_ref())))));
+            tmp_modes_scale.as_ref()
+            * w_im.as_ref());
     }
 
     /// Return the snapshots of x_data from 0, N-1
