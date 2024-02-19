@@ -90,19 +90,18 @@ impl <'a> DMDc <'a> {
         let s_til_inv = mat_pinv_diag(s_til_diag.as_ref());
 
         // from eq 29 in Proctor. et. al DMDc
-        let a_til =
+        let tmp_op_scale =
             u_hat.as_ref().transpose()
             * self._Y(omega.as_ref())
             * v_til.as_ref()
-            * s_til_inv.as_ref()
+            * s_til_inv.as_ref();
+        let a_til =
+            tmp_op_scale.as_ref()
             * u_til_1.transpose() * u_hat.as_ref();
 
         // from eq 30 in Proctor. et. al DMDc
         let b_til: Mat<f64> =
-            u_hat.as_ref().transpose()
-            * self._Y(omega.as_ref())
-            * v_til.as_ref()
-            * s_til_inv.as_ref()
+            tmp_op_scale.as_ref()
             * u_til_2.transpose();
         //
         // self._basis = Some(u_hat.clone());
