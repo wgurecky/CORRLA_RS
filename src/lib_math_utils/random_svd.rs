@@ -6,9 +6,88 @@ use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
 use num_traits::Float;
 use std::time::SystemTime;
+use polars::frame::{DataFrame};
+use polars::frame::row::{Row};
 
 // Internal imports
 use crate::lib_math_utils::mat_utils::*;
+
+
+pub fn build_ymat<T>(a_mat: MatRef<T>, omega_rank: usize)
+    -> (Mat<T>, Mat<T>)
+    where
+    T: faer_core::RealField + Float
+{
+    // Generate random matrix, omega
+    let a_ncols = a_mat.ncols();
+    // let omega = random_mat_normal::<T>(a_nrows, omega_rank);
+    let omega = random_mat_normal::<T>(a_ncols, omega_rank);
+
+    // initial guess for y_mat is product A*omega
+    // a_mat is nxm, with n >> m. omega is mxk
+    // y_mat is nxk
+    let y_mat = a_mat * omega.as_ref();
+    (y_mat, omega)
+}
+
+pub fn build_ymat_frame<T>(a_frame: &DataFrame, omega_rank: usize)
+    -> (Mat<T>, Mat<T>)
+    where
+    T: faer_core::RealField + Float
+{
+    let a_ncols = a_frame.width();
+    let omega = random_mat_normal::<T>(a_ncols, omega_rank);
+    let y_mat = frame_matmul(a_frame, omega.as_ref());
+    (y_mat, omega)
+}
+
+/// Performs out-of-core matrix-matrix A*B multiples where A
+/// is in the polars dataframe format and B is ref to in-memory faer Mat.
+pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
+    -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    // iterate over dataframe rows
+    let a_nrows = a_frame.height();
+    let a_ncols = a_frame.width();
+    let b_ncols = b_mat.ncols();
+
+    // storage for output
+    let mut out = faer::Mat::zeros(a_nrows, b_ncols);
+
+    // perform out of core matmul row-wise in a (slow)
+    for i in 0..a_nrows {
+        // get one row at a time
+        let tmp_row = a_frame.get_row(i).unwrap();
+        // iterate over entries in each output column and b_mat col
+        // sum over a rows
+        for mut col_out in out.col_chunks_mut(1).into_iter() {
+            for (j, row_val) in tmp_row.0.iter().enumerate() {
+                let tmp_aval = row_val.try_extract::<T>().unwrap();
+                let tmp_bval = b_mat.read(j, i);
+                col_out.write(j, 0, tmp_aval * tmp_bval + col_out.read(j, 0));
+            }
+        }
+    }
+    out
+}
+
+/// Performs out-of-core matrix-matrix A*B
+pub fn frame_matmul_b<T>(a_mat: MatRef<T>, b_frame: &DataFrame)
+    -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    // iterate over dataframe rows
+    let a_nrows = a_mat.nrows();
+    let a_ncols = a_mat.ncols();
+    let b_ncols = b_frame.width();
+
+    // storage for output
+    let mut out = faer::Mat::zeros(a_nrows, b_ncols);
+    out
+}
 
 /// From algorithm 9 in P. Martinsson, J. Tropp.
 /// Randomized Numerical Linear Algebra:
@@ -18,18 +97,12 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     where
     T: faer_core::RealField + Float
 {
-    // Generate random matrix, omega
-    let a_ncols = a_mat.ncols();
-    let a_nrows = a_mat.nrows();
-    // let omega = random_mat_normal::<T>(a_nrows, omega_rank);
-    let omega = random_mat_normal::<T>(a_ncols, omega_rank);
-    let o_ncols = omega.ncols();
-    let o_nrows = omega.nrows();
-
     // initial guess for y_mat is product A*omega
     // a_mat is nxm, with n >> m. omega is mxk
     // y_mat is nxk
-    let mut y_mat = a_mat * omega;
+    let (mut y_mat, omega) = build_ymat(a_mat, omega_rank);
+    let o_ncols = omega.ncols();
+    let o_nrows = omega.nrows();
 
     // storage for matmul results
     let mut o_mat_res: Mat<T> = Mat::zeros(o_nrows, o_ncols);
@@ -50,15 +123,79 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
             a_mat.as_ref(),
             o_mat_res.as_ref(), T::from(1.0).unwrap(),
             8);
-        // apply norm
-        // y_mat = y_mat.as_ref() * faer::scale(
-        //    T::from(1.).unwrap() / y_mat.norm_l2()
-        //    );
     }
     let my_q = y_mat.qr().compute_thin_q();
     my_q
 }
 
+pub fn power_iter_frame<T>(a_frame: &DataFrame, omega_rank: usize, n_iter: usize)
+    -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    // initial guess for y_mat is product A*omega
+    // a_mat is nxm, with n >> m. omega is mxk
+    // y_mat is nxk
+    let (mut y_mat, _omega) = build_ymat_frame::<T>(a_frame, omega_rank);
+
+    // transpose of original dataframe
+    let a_frame_t = a_frame.to_owned().transpose(None, None).unwrap();
+
+    for i in 0..n_iter {
+        // update y_mat qr
+        if i > 2 {
+            y_mat = y_mat.qr().compute_thin_q();
+        }
+        // y_mat = a_mat * (a_mat.transpose() * &y_mat);
+        y_mat = frame_matmul(&a_frame, frame_matmul(&a_frame_t, y_mat.as_ref()).as_ref() );
+    }
+    let my_q = y_mat.qr().compute_thin_q();
+    my_q
+}
+
+
+/// Randomized SVD from parqet file.
+/// Useful when data is too large to fit into RAM. See
+/// PcaRsvdParquet for a large data use case.
+pub fn random_svd_frame<T>(a_frame: DataFrame, omega_rank: usize, n_iter: usize, n_oversamples: usize)
+    -> (Mat<T>, Mat<T>, Mat<T>)
+    where
+    T: faer_core::RealField + Float
+{
+    let mut aa_frame = a_frame.to_owned();
+    let mut fat: bool = false;
+    if a_frame.height() < a_frame.width() {
+        fat = true;
+        aa_frame = aa_frame.transpose(None, None).unwrap();
+    }
+    // get random projection of a_mat onto my_q
+    let my_q_mat = power_iter_frame::<T>(
+        &aa_frame, cmp::min(omega_rank+n_oversamples, aa_frame.width()), n_iter);
+    let my_b_mat = frame_matmul_b(my_q_mat.transpose(), &aa_frame);
+
+    // compute svd of reduced B matrix
+    let my_rsvd = my_b_mat.svd();
+
+    // map back to original space
+    let u = my_q_mat * my_rsvd.u();
+
+    // A = U * S * V
+    // A^T = V^T * S^T * U^T
+    if fat == true {
+        (
+         my_rsvd.v().get(.., 0..omega_rank).to_owned(),
+         my_rsvd.s_diagonal().get(0..omega_rank, ..).to_owned(),
+         u.transpose().get(0..omega_rank, ..).to_owned(),
+        )
+    }
+    else {
+        (
+         u.get(.., 0..omega_rank).to_owned(),
+         my_rsvd.s_diagonal().get(0..omega_rank, ..).to_owned(),
+         my_rsvd.v().get(.., 0..omega_rank).transpose().to_owned()
+        )
+    }
+}
 
 /// Randomized SVD
 pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_oversamples: usize)
@@ -79,12 +216,6 @@ pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_overs
     // q_mat is nxk, q_mat.T is kxn  , aa_mat is nxm
     // b mat is kxm
     let my_b_mat = my_q_mat.transpose() * aa_mat;
-    // let mut my_b_mat = faer::Mat::zeros(my_q_mat.ncols(), aa_mat.ncols());
-    // par_matmul_helper(
-    //     my_b_mat.as_mut(),
-    //     my_q_mat.transpose().as_ref(),
-    //     aa_mat.as_ref(),
-    //     T::from(1.0).unwrap(), 8);
 
     // compute svd of reduced B matrix
     let my_rsvd = my_b_mat.svd();

@@ -32,9 +32,7 @@ Sampling Methods
 - Markov chain Monte Carlo (MCMC) samplers:
   - Differential evolution MCMC (DEMC), parallel implementation.
   - Differential evolution adaptive metropolis MCMC (DREAM), parallel implementation.
-- Multivariate (MV) distribution samplers:
   - Dirichlet MV constrained sampler
-  - Others TBD
 
 Distribution Functions
 
@@ -46,7 +44,10 @@ Distribution Functions
     - Gumbel
   - Pair-Copula constructions (Vine-Copula) (TODO)
 - Univariate
-  - TBD
+  - Normal
+  - Beta
+  - Exponential
+  - Kernel density function estimation and sampling
 
 Package Build
 -------------

@@ -32,18 +32,23 @@ def build_snapshots():
         p_snapshot = p_fn(x_points, t)
         p_snapshots.append(p_snapshot)
     p_snapshots = np.asarray(p_snapshots).T
-    plot_snapshots(x_points, t_points, p_snapshots)
+    plot_snapshots(x_points, t_points, p_snapshots, title="Original Data")
 
-    return p_snapshots, u_seq
+    return p_snapshots, u_seq, t_points, x_points
 
 
-def plot_snapshots(x_points, t_points, p_snapshots):
+def plot_snapshots(x_points, t_points, p_snapshots, fig_f="pydmdc_snapshots.png", title=""):
     plt.figure()
-    for t, p_snapshot in zip(t_points, p_snapshots.T):
-        plt.plot(x_points, p_snapshot, label=str(t))
-    plt.legend()
+    colors = plt.cm.jet(np.linspace(0,1,len(t_points)))
+    for i, (t, p_snapshot) in enumerate(zip(t_points, p_snapshots.T)):
+        plt.plot(x_points, p_snapshot, label="t=" + str(t), color=colors[i])
+    plt.legend(ncol=3, fontsize=8)
+    plt.title(title)
+    plt.ylim(0, 12)
     plt.grid(ls="--", alpha=0.5)
-    plt.savefig("pydmdc_snapshots.png")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.savefig(fig_f)
     plt.close()
 
 
@@ -77,7 +82,7 @@ def predict_dmdc(pydmdc_model: DMDc, x0, u_seq):
     return np.hstack(predicted_x)
 
 def fit_pydmd():
-    p_snapshots, u_seq = build_snapshots()
+    p_snapshots, u_seq, t_points, x_s = build_snapshots()
     n_modes = 12
     ti = time.time()
     pydmdc_model = DMDc(svd_rank=n_modes, svd_rank_omega=n_modes)
@@ -102,10 +107,25 @@ def fit_pydmd():
 
     print("pydmdc predicted: ", predicted[:, 20])
     print("pydmdc expected: ", p_snapshots[:, 20])
-
+    eval_t = t_points[1:]
+    plot_snapshots(x_s, eval_t, predicted, fig_f="pydmdc_dmd_predictions.png",
+                   title="PyDMD Predicted")
+    mae_list = []
+    for i in range(len(eval_t)):
+        diffs = predicted[:, i] - p_snapshots[:, i+1]
+        mae = np.mean(np.abs(diffs))
+        mae_list.append(mae)
+    plt.figure()
+    plt.plot(eval_t, mae_list)
+    plt.title("Other PyDMD DMDc code model \n Mean Absolute Diffs: | DMDc model - truth |")
+    plt.grid(ls="--")
+    plt.ylabel("Mean Abs Error")
+    plt.xlabel("forecast time")
+    plt.savefig("dmd_pydmdc_errors.png")
+    plt.close()
 
 def fit_corrla_dmd():
-    p_snapshots, u_seq = build_snapshots()
+    p_snapshots, u_seq, t_points, x_s = build_snapshots()
     n_modes = 12
     n_iters = 10
     ti = time.time()
@@ -118,6 +138,23 @@ def fit_corrla_dmd():
     predicted = rust_dmdc.predict(x0, u_s)
     print("corrla dmdc predicted: ", predicted[:, 20])
     print("corrla dmdc expected: ", p_snapshots[:, 20])
+
+    eval_t = t_points[1:]
+    plot_snapshots(x_s, eval_t, predicted, fig_f="corrla_dmd_predictions.png",
+                   title="Corrla DMDc Predicted")
+    mae_list = []
+    for i in range(len(eval_t)):
+        diffs = predicted[:, i] - p_snapshots[:, i+1]
+        mae = np.mean(np.abs(diffs))
+        mae_list.append(mae)
+    plt.figure()
+    plt.plot(eval_t, mae_list)
+    plt.title("My DMDc code model \n Mean Absolute Diffs: | DMDc model - truth |")
+    plt.grid(ls="--")
+    plt.ylabel("Mean Abs Error")
+    plt.xlabel("forecast time")
+    plt.savefig("dmd_corrla_errors.png")
+    plt.close()
 
 
 if __name__ == "__main__":
