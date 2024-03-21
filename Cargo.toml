@@ -24,8 +24,10 @@ num-traits = "*"
 num-complex = "*"
 ndarray = {version=">=0.15.6", features=["rayon"]}
 nalgebra = "*"
-polars = "*"
-faer = {version = "0.17.1", features = ["ndarray"]}
+polars = {version="0.38.3", features=["lazy"]}
+polars-core = "0.38.3"
+polars-lazy = "0.38.3"
+faer = {version = "0.17.1", features = ["ndarray", "polars"]}
 faer-core = "0.17.1"
 rayon = "*"
 pyo3 = {version = "0.20", features = ["extension-module"]}

@@ -6,8 +6,11 @@ use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
 use num_traits::Float;
 use std::time::SystemTime;
-use polars::frame::{DataFrame};
-use polars::frame::row::{Row};
+//use polars::frame::{DataFrame};
+//use polars::frame::row::{Row};
+//use polars_core::prelude::*;
+//use polars_lazy::prelude::*;
+use polars::prelude::*;
 
 // Internal imports
 use crate::lib_math_utils::mat_utils::*;
@@ -73,7 +76,8 @@ pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
     out
 }
 
-/// Performs out-of-core matrix-matrix A*B
+/// Performs out-of-core matrix-matrix A*B where B
+/// is in the polars dataframe format and A is in-memory.
 pub fn frame_matmul_b<T>(a_mat: MatRef<T>, b_frame: &DataFrame)
     -> Mat<T>
     where
@@ -86,6 +90,24 @@ pub fn frame_matmul_b<T>(a_mat: MatRef<T>, b_frame: &DataFrame)
 
     // storage for output
     let mut out = faer::Mat::zeros(a_nrows, b_ncols);
+    let mut col_tmp: Mat<T> = faer::Mat::zeros(a_ncols, 1);
+
+    // iterate over the columns of the b_frame
+    for (j, col) in b_frame.iter().enumerate() {
+        let col_frame = col.clone().into_frame().lazy();
+        // convert to faer
+        let col_mat = faer::polars::polars_to_faer_f64(col_frame).unwrap();
+        // convert type
+        for i in 0..a_ncols {
+            col_tmp.write(i, 0, T::from(col_mat.read(0, i)).unwrap());
+        }
+        // multiply by a_mat, forms the jth col of the output
+        let out_col = a_mat.as_ref() * col_tmp.as_ref();
+        for i in 0..a_ncols {
+            out.write(i, j, col_tmp.read(i, 0));
+        }
+    }
+
     out
 }
 
