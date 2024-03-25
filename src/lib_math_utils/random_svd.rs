@@ -6,10 +6,6 @@ use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
 use num_traits::Float;
 use std::time::SystemTime;
-//use polars::frame::{DataFrame};
-//use polars::frame::row::{Row};
-//use polars_core::prelude::*;
-//use polars_lazy::prelude::*;
 use polars::prelude::*;
 
 // Internal imports
@@ -40,13 +36,13 @@ pub fn build_ymat_frame<T>(a_frame: &DataFrame, omega_rank: usize)
 {
     let a_ncols = a_frame.width();
     let omega = random_mat_normal::<T>(a_ncols, omega_rank);
-    let y_mat = frame_matmul(a_frame, omega.as_ref());
+    let y_mat = frame_matmul_a(a_frame, omega.as_ref());
     (y_mat, omega)
 }
 
 /// Performs out-of-core matrix-matrix A*B multiples where A
 /// is in the polars dataframe format and B is ref to in-memory faer Mat.
-pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
+pub fn frame_matmul_a<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
     -> Mat<T>
     where
     T: faer_core::RealField + Float
@@ -55,6 +51,7 @@ pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
     let a_nrows = a_frame.height();
     let a_ncols = a_frame.width();
     let b_ncols = b_mat.ncols();
+    let t_zero = T::from(0.0).unwrap();
 
     // storage for output
     let mut out = faer::Mat::zeros(a_nrows, b_ncols);
@@ -67,7 +64,7 @@ pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
         // sum over a rows
         for mut col_out in out.col_chunks_mut(1).into_iter() {
             for (j, row_val) in tmp_row.0.iter().enumerate() {
-                let tmp_aval = row_val.try_extract::<T>().unwrap();
+                let tmp_aval = row_val.try_extract::<T>().unwrap_or(t_zero);
                 let tmp_bval = b_mat.read(j, i);
                 col_out.write(j, 0, tmp_aval * tmp_bval + col_out.read(j, 0));
             }
@@ -75,6 +72,43 @@ pub fn frame_matmul<T>(a_frame: &DataFrame, b_mat: MatRef<T>)
     }
     out
 }
+
+/// Performs out-of-core matrix-matrix A^T*B multiples where A
+/// is in the polars dataframe format and B is ref to in-memory faer Mat.
+pub fn frame_matmul_a_tr<T>(a_tr_frame: &DataFrame, b_mat: MatRef<T>)
+    -> Mat<T>
+    where
+    T: faer_core::RealField + Float
+{
+    // iterate over dataframe rows
+    let a_nrows = a_tr_frame.height();
+    let a_ncols = a_tr_frame.width();
+    let b_ncols = b_mat.ncols();
+    let t_zero = T::from(0.0).unwrap();
+    let f_zero: f64 = 0.0;
+
+    // storage for output
+    let mut out = faer::Mat::zeros(a_nrows, b_ncols);
+
+    // perform out of core matmul row-wise in a (slow)
+    for (i, a_tr_col) in a_tr_frame.iter().enumerate() {
+        // a_tr_col are rows of A
+        let tmp_row_vec = a_tr_col.f64().unwrap().to_vec();
+        // convert vec entries to type T
+        let row_vec: Vec<T> = tmp_row_vec.iter().map(|x| T::from(x.unwrap_or(f_zero)).unwrap() ).collect();
+        // iterate over entries in each output column and b_mat col
+        // sum over a rows
+        for mut col_out in out.col_chunks_mut(1).into_iter() {
+            for (j, row_val) in row_vec.iter().enumerate() {
+                let tmp_aval = row_val;
+                let tmp_bval = b_mat.read(j, i);
+                col_out.write(j, 0, *tmp_aval * tmp_bval + col_out.read(j, 0));
+            }
+        }
+    }
+    out
+}
+
 
 /// Performs out-of-core matrix-matrix A*B where B
 /// is in the polars dataframe format and A is in-memory.
@@ -87,6 +121,7 @@ pub fn frame_matmul_b<T>(a_mat: MatRef<T>, b_frame: &DataFrame)
     let a_nrows = a_mat.nrows();
     let a_ncols = a_mat.ncols();
     let b_ncols = b_frame.width();
+    let f_zero: f64 = 0.0;
 
     // storage for output
     let mut out = faer::Mat::zeros(a_nrows, b_ncols);
@@ -94,17 +129,17 @@ pub fn frame_matmul_b<T>(a_mat: MatRef<T>, b_frame: &DataFrame)
 
     // iterate over the columns of the b_frame
     for (j, col) in b_frame.iter().enumerate() {
-        let col_frame = col.clone().into_frame().lazy();
-        // convert to faer
-        let col_mat = faer::polars::polars_to_faer_f64(col_frame).unwrap();
-        // convert type
+        // convert to vec
+        let tmp_col_vec = col.f64().unwrap().to_vec();
+        // convert vec entries to type T
+        let col_vec: Vec<T> = tmp_col_vec.iter().map(|x| T::from(x.unwrap_or(f_zero)).unwrap() ).collect();
         for i in 0..a_ncols {
-            col_tmp.write(i, 0, T::from(col_mat.read(0, i)).unwrap());
+            col_tmp.write(i, 0, col_vec[i]);
         }
         // multiply by a_mat, forms the jth col of the output
         let out_col = a_mat.as_ref() * col_tmp.as_ref();
         for i in 0..a_ncols {
-            out.write(i, j, col_tmp.read(i, 0));
+            out.write(i, j, out_col.read(i, 0));
         }
     }
 
@@ -160,8 +195,8 @@ pub fn power_iter_frame<T>(a_frame: &DataFrame, omega_rank: usize, n_iter: usize
     // y_mat is nxk
     let (mut y_mat, _omega) = build_ymat_frame::<T>(a_frame, omega_rank);
 
-    // transpose of original dataframe
-    let a_frame_t = a_frame.to_owned().transpose(None, None).unwrap();
+    // transpose of original dataframe, expensive
+    // let a_frame_t = a_frame.to_owned().transpose(None, None).unwrap();
 
     for i in 0..n_iter {
         // update y_mat qr
@@ -169,7 +204,8 @@ pub fn power_iter_frame<T>(a_frame: &DataFrame, omega_rank: usize, n_iter: usize
             y_mat = y_mat.qr().compute_thin_q();
         }
         // y_mat = a_mat * (a_mat.transpose() * &y_mat);
-        y_mat = frame_matmul(&a_frame, frame_matmul(&a_frame_t, y_mat.as_ref()).as_ref() );
+        // y_mat = frame_matmul_a(&a_frame, frame_matmul_a(&a_frame_t, y_mat.as_ref()).as_ref() );
+        y_mat = frame_matmul_a(&a_frame, frame_matmul_a_tr(&a_frame, y_mat.as_ref()).as_ref() );
     }
     let my_q = y_mat.qr().compute_thin_q();
     my_q
