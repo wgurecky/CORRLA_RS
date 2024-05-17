@@ -6,6 +6,7 @@
 use num_traits::Float;
 use faer::{prelude::*, IntoNdarray};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer_core::ColRef;
 use faer_core::{c64, c32};
 use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
@@ -350,6 +351,18 @@ pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     out_mat
 }
 
+/// converts a col mat to a diagnoal matrix
+pub fn mat_colmat_to_diag<T>(vec: ColRef<T>) -> Mat<T>
+    where
+    T: faer_core::ComplexField
+{
+    let mut out_mat = faer::Mat::zeros(vec.nrows(), vec.nrows());
+    for i in 0..vec.nrows() {
+        out_mat.write(i, i, vec.read(i));
+    }
+    out_mat
+}
+
 
 /// converts a row vector to a diagnoal matrix
 pub fn mat_rowvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
@@ -402,6 +415,27 @@ pub fn mat_col_to_vec<T>(a_mat: MatRef<T>, col: usize) -> Vec<T>
     tmp_1darray.to_vec()
 }
 
+/// create a owned Vec from mat diag, results in data copy
+pub fn mat_diag_to_vec<T>(a_mat: MatRef<T>) -> Vec<T>
+    where
+    T: faer_core::SimpleEntity
+{
+    let mut diag_vec: Vec<T> = Vec::new();
+    for i in 0..a_mat.ncols() {
+        diag_vec.push(a_mat.read(i, i));
+    }
+    diag_vec
+}
+
+/// Returns indicies that would sort a vec of floats
+pub fn argsort_float<T>(a: &[T]) -> Vec<usize>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut idx = (0..a.len()).collect::<Vec<_>>();
+    idx.sort_by(|&i, &j| a[j].partial_cmp(&a[i]).unwrap());
+    idx
+}
 
 /// Centers the matrix such that the cols have zero mean.
 /// returns a new matrix, does not modify original mat
