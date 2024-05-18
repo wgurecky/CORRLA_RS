@@ -198,33 +198,13 @@ impl ActiveSsRsvd {
         let eigs = evd.s_diagonal();
         let eig_vs = evd.u();
         // split real from complex part, discard imag parts (zero)
-        let (real_eig_vs, _imag_eig_vs) = mat_parts_from_complex(eig_vs);
-        let (real_eigs, _imag_eigs) = mat_parts_from_complex(mat_colmat_to_diag(eigs).as_ref());
-        self.components_ = Some(real_eig_vs.to_owned());
-        self.singular_vals_ = Some(real_eigs);
-        self.reorder_ev();
-    }
-
-    fn reorder_ev(&mut self) {
-        // compute ordering
-        let diag_singular_vals = mat_diag_to_vec(self.singular_vals_.as_ref().unwrap().as_ref());
-        let dim = diag_singular_vals.len();
-        let sorted_idx = argsort_float(&diag_singular_vals);
-        // order the singular vals from highest to lowest
-        let mut sorted_singular_vals: Mat<f64> = faer::Mat::zeros(dim, dim);
-        let mut sorted_components: Mat<f64> = faer::Mat::zeros(
-            self.components_.as_ref().unwrap().nrows(),
-            self.components_.as_ref().unwrap().ncols());
-        for (i, idx) in sorted_idx.into_iter().enumerate() {
-            sorted_singular_vals.write(i, i,
-                self.singular_vals_.as_ref().unwrap().as_ref().read(idx, idx)
-                );
-            for j in 0..self.components_.as_ref().unwrap().ncols() {
-                sorted_components.write(i, j,
-                                        self.components_.as_ref().unwrap().as_ref().read(
-                                            idx, j));
-            }
-        }
+        let (real_eigs, _imag_eigs) =
+            mat_parts_from_complex(mat_colmat_to_diag(eigs).as_ref());
+        let (real_eig_vs, _imag_eig_vs) =
+            mat_parts_from_complex(eig_vs);
+        // sort eigenvalues and eigenvectors from largest to smallest
+        let (sorted_singular_vals, sorted_components) =
+            sort_evd(real_eigs.as_ref(), real_eig_vs.as_ref());
         self.components_ = Some(sorted_components);
         self.singular_vals_ = Some(sorted_singular_vals);
     }
