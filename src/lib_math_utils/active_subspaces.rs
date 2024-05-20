@@ -1,9 +1,10 @@
-// Impl active subspace indentification methods from
-//  - pre-computed samples (monte-caro or from prior LHS sampling)
-//  - space filling sampling methods (moris)
-//  - space filling adaptive sampling methods (moris + updated AS)
-//
-//
+/// Impl active subspace indentification methods from
+///  - pre-computed samples (monte-caro or from prior LHS sampling)
+///  - space filling sampling methods (moris)
+///  - space filling adaptive sampling methods (moris + updated AS)
+/// Ref: P. Constantine. et. al. Active subspace methods in theory and
+/// practice. https://arxiv.org/pdf/1304.2070.pdf
+///
 use std::cmp;
 use assert_approx_eq::assert_approx_eq;
 use faer::{prelude::*, IntoFaer};
@@ -174,7 +175,7 @@ impl ActiveSsRsvd {
 
     /// Compute gradients and active subspace using sample
     /// locations from x_mat rows
-    pub fn fit_svd(&mut self, x_mat: MatRef<f64>)
+    pub fn fit_svd(&mut self, x_mat: MatRef<f64>, n_iter: Option<usize>, n_oversamples: Option<usize>)
     {
         let k_features = x_mat.ncols();
         let grad_mat = self.create_grad_mat(x_mat);
@@ -182,7 +183,8 @@ impl ActiveSsRsvd {
 
         // compute svd of the gradient matrix
         let (ur, sr, _vr) = random_svd(grad_mat_sc.as_ref(),
-            cmp::min(k_features, self.n_comps), 8, 10);
+            cmp::min(k_features, self.n_comps),
+            n_iter.unwrap_or(8), n_oversamples.unwrap_or(10));
         self.components_ = Some(ur);
         self.singular_vals_ = Some(mat_colvec_to_diag(sr.as_ref()));
     }
@@ -190,7 +192,7 @@ impl ActiveSsRsvd {
     pub fn fit(&mut self, x_mat: MatRef<f64>)
     {
         let grad_mat = self.create_grad_mat(x_mat);
-        let grad_mat_sc = grad_mat.as_ref() * grad_mat.transpose() * faer::scale(1. / (x_mat.nrows() as f64).sqrt());
+        let grad_mat_sc = grad_mat.as_ref() * grad_mat.transpose() * faer::scale(1. / (x_mat.nrows() as f64));
         assert!(grad_mat_sc.nrows() == x_mat.ncols());
         assert!(grad_mat_sc.ncols() == x_mat.ncols());
         // all eigenvalues of a real sym mat are real

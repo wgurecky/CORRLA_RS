@@ -94,7 +94,8 @@ Then in a python terminal to test:
     >>> import corrla_rs
     >>> import numpy as np
     >>> a = np.random.randn(100, 100)
-    >>> corrla_rs.rsvd(a)
+    >>> n_rank, n_iters, n_oversamples = 10, 12, 8
+    >>> corrla_rs.rsvd(a, n_rank, n_iters, n_oversamples)
     >>> x = np.random.randn(1000, 10)
     >>> y = np.random.randn(1000, 1)
     >>> est_order = 1

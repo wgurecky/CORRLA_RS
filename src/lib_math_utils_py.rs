@@ -1,5 +1,5 @@
 use numpy::ndarray::{Array1, Array2, ArrayD, ArrayView1, ArrayViewD, ArrayViewMutD, Zip};
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2, PyReadonlyArray1, PyArrayDyn, PyReadonlyArrayDyn};
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArray1, PyArrayDyn, PyReadonlyArrayDyn};
 use pyo3::{exceptions::PyRuntimeError, pyclass, pymodule, types::PyModule, PyResult, Python};
 use pyo3::prelude::*;
 
@@ -57,7 +57,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
     fn active_ss<'py>(py: Python<'py>, a_mat: PyReadonlyArray2<'py, f64>,
                       y: PyReadonlyArray2<'py, f64>,
                       order: usize, n_nbr: usize, n_comps: usize)
-        -> (&'py PyArray2<f64>, &'py PyArray2<f64>)
+        -> (&'py PyArray2<f64>, &'py PyArray2<f64>, &'py PyArray1<f64>)
     {
         // convert numpy array into rust ndarray and
         // convert to faer-rs matrix
@@ -73,11 +73,16 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         // compute active subspace directions and singular values
         let mut act_ss = ActiveSsRsvd::new(grad_est, n_comps);
         act_ss.fit(x_mat.as_ref());
-        let components = act_ss.components_.unwrap();
-        let singular_vals = act_ss.singular_vals_.unwrap();
+        let components = act_ss.components();
+        let singular_vals = act_ss.singular_vals();
+        // compute sensitivity coeffs
+        let var_sensi = act_ss.var_diag_evd_sensi();
+        // convert to python arrays
         let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
         let ndarray_pv: Array2<f64> = singular_vals.as_ref().into_ndarray().to_owned();
-        (ndarray_pc.into_pyarray(py), ndarray_pv.into_pyarray(py))
+        (ndarray_pc.into_pyarray(py),
+         ndarray_pv.into_pyarray(py),
+         var_sensi.into_pyarray(py))
     }
 
     #[pyfn(m)]
