@@ -101,7 +101,8 @@ Then in a python terminal to test:
     >>> est_order = 1
     >>> n_neighbors = 30
     >>> n_comps = 8
-    >>> corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
+    >>> comps, vals, sensi = corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
+    >>> print(comps, vals, sensi)
 
 
 Rust Setup
