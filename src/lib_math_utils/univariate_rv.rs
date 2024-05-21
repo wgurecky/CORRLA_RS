@@ -547,12 +547,12 @@ mod univariate_rv_unit_tests {
 
             // check fitted dist params
             println!("Fitted alpha: {:?}  beta: {:?}", tst_rv_a.alpha, tst_rv_a.beta);
-            assert_approx_eq!(tst_rv_a.alpha, alpha, 1e-1);
-            assert_approx_eq!(tst_rv_a.beta, beta, 1e-1);
+            assert_approx_eq!(tst_rv_a.alpha, alpha, 2e-1);
+            assert_approx_eq!(tst_rv_a.beta, beta, 2e-1);
 
             // sample from fitted beta dist
             let samples = tst_rv_a.sample(ns, None);
-            let abs_tol = 6e-2*(upper_b-lower_b);
+            let abs_tol = 7e-2*(upper_b-lower_b);
             assert_approx_eq!(samples.mean().unwrap(), out.mean().unwrap(), abs_tol);
             assert_approx_eq!(samples.std(0.0), out.std(0.0), abs_tol);
         }

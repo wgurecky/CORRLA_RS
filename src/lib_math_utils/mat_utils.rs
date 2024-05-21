@@ -6,6 +6,7 @@
 use num_traits::Float;
 use faer::{prelude::*, IntoNdarray};
 use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer_core::ColRef;
 use faer_core::{c64, c32};
 use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
@@ -350,6 +351,18 @@ pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     out_mat
 }
 
+/// converts a col mat to a diagnoal matrix
+pub fn mat_colmat_to_diag<T>(vec: ColRef<T>) -> Mat<T>
+    where
+    T: faer_core::ComplexField
+{
+    let mut out_mat = faer::Mat::zeros(vec.nrows(), vec.nrows());
+    for i in 0..vec.nrows() {
+        out_mat.write(i, i, vec.read(i));
+    }
+    out_mat
+}
+
 
 /// converts a row vector to a diagnoal matrix
 pub fn mat_rowvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
@@ -402,6 +415,61 @@ pub fn mat_col_to_vec<T>(a_mat: MatRef<T>, col: usize) -> Vec<T>
     tmp_1darray.to_vec()
 }
 
+/// create a owned Vec from mat diag, results in data copy
+pub fn mat_diag_to_vec<T>(a_mat: MatRef<T>) -> Vec<T>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut diag_vec: Vec<T> = Vec::new();
+    for i in 0..a_mat.ncols() {
+        diag_vec.push(a_mat.read(i, i));
+    }
+    diag_vec
+}
+
+/// Returns indicies that would sort a vec of floats
+/// TODO: make this work for real and imag vecs
+pub fn argsort_float<T>(a: &[T]) -> Vec<usize>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut idx = (0..a.len()).collect::<Vec<_>>();
+    idx.sort_by(|&i, &j| a[i].partial_cmp(&a[j]).unwrap());
+    idx
+}
+/// Returns indicies that would sort a vec of floats, high to lowest
+pub fn argsort_float_rev<T>(a: &[T]) -> Vec<usize>
+    where
+    T: faer_core::RealField + Float
+{
+    let mut idx = (0..a.len()).collect::<Vec<_>>();
+    idx.sort_by(|&i, &j| a[j].partial_cmp(&a[i]).unwrap());
+    idx
+}
+
+/// Sorts eigenvalues and eigenvectors by magnitude of eigenvalues,
+/// largest to smallest.  Uses argsort_float.
+/// Only works for real matricies. TODO: fix for both real and complex mats
+pub fn sort_evd<T>(eigs: MatRef<T>, eigvs: MatRef<T>) -> (Mat<T>, Mat<T>)
+    where
+    T: faer_core::RealField + Float
+{
+    let dim = eigs.ncols();
+    // compute ordering
+    let vec_eigs = mat_diag_to_vec(eigs);
+    let sorted_idx = argsort_float_rev(&vec_eigs);
+    // order the singular vals from highest to lowest
+    let mut sorted_eigs: Mat<T> = faer::Mat::zeros(dim, dim);
+    let mut sorted_eigvs: Mat<T> =
+        faer::Mat::zeros(eigvs.nrows(), eigvs.ncols());
+    for (j, idx) in sorted_idx.into_iter().enumerate() {
+        sorted_eigs.write(j, j, eigs.read(idx, idx));
+        for i in 0..eigvs.nrows() {
+            sorted_eigvs.write(i, j, eigvs.read(i, idx));
+        }
+    }
+    (sorted_eigs, sorted_eigvs)
+}
 
 /// Centers the matrix such that the cols have zero mean.
 /// returns a new matrix, does not modify original mat
@@ -835,5 +903,54 @@ mod mat_utils_unit_tests {
             [0.0, 0.0, 1.0 / 3.0, 0.0],
             [0.0, 0.0, 0.0,       0.0],];
         mat_mat_approx_eq(expected.as_ref(), inv_a.as_ref(), 1.0e-12f64);
+    }
+
+    #[test]
+    fn test_argsort() {
+        let tst_vec: Vec<f64> = vec!(1.0, 3.0, 2.0);
+        let tst_sorted_vec_idx = argsort_float(&tst_vec);
+        let tst_revsorted_vec_idx = argsort_float_rev(&tst_vec);
+        assert!(tst_vec[tst_sorted_vec_idx[0]] == 1.0);
+        assert!(tst_vec[tst_sorted_vec_idx[1]] == 2.0);
+        assert!(tst_vec[tst_revsorted_vec_idx[0]] == 3.0);
+        assert!(tst_vec[tst_revsorted_vec_idx[1]] == 2.0);
+    }
+
+    #[test]
+    fn test_evd_sort() {
+        let tst_eigs = faer::mat![
+            [2.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 3.0],
+            ];
+        let tst_eigvs = faer::mat![
+            [2.0, 1.0, 3.0],
+            [2.0, 1.0, 3.0],
+            [2.0, 1.0, 3.0],
+            ];
+        let (sorted_eigs, sorted_eigvs) =
+            sort_evd(tst_eigs.as_ref(), tst_eigvs.as_ref());
+        println!("{:?}", sorted_eigs.as_ref());
+        println!("{:?}", sorted_eigvs.as_ref());
+        // expected to be sorted from largest ev to smallest
+        let expected_sorted_eigs = faer::mat![
+            [3.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ];
+        mat_mat_approx_eq(
+            expected_sorted_eigs.as_ref(),
+            sorted_eigs.as_ref(),
+            1e-12);
+        let expected_sorted_eigvs = faer::mat![
+            [3.0, 2.0, 1.0],
+            [3.0, 2.0, 1.0],
+            [3.0, 2.0, 1.0],
+            ];
+        mat_mat_approx_eq(
+            expected_sorted_eigvs.as_ref(),
+            sorted_eigvs.as_ref(),
+            1e-12);
+
     }
 }

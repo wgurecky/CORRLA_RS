@@ -94,13 +94,15 @@ Then in a python terminal to test:
     >>> import corrla_rs
     >>> import numpy as np
     >>> a = np.random.randn(100, 100)
-    >>> corrla_rs.rsvd(a)
+    >>> n_rank, n_iters, n_oversamples = 10, 12, 8
+    >>> corrla_rs.rsvd(a, n_rank, n_iters, n_oversamples)
     >>> x = np.random.randn(1000, 10)
     >>> y = np.random.randn(1000, 1)
     >>> est_order = 1
     >>> n_neighbors = 30
     >>> n_comps = 8
-    >>> corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
+    >>> comps, vals, sensi = corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
+    >>> print(comps, vals, sensi)
 
 
 Rust Setup
