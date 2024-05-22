@@ -71,12 +71,12 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
             x_mat, y_mat, order, n_nbr);
 
         // compute active subspace directions and singular values
-        let mut act_ss = ActiveSsRsvd::new(grad_est, n_comps);
-        act_ss.fit(x_mat.as_ref());
-        let components = act_ss.components();
-        let singular_vals = act_ss.singular_vals();
+        let fit_act_ss = ActiveSsRsvd::new(grad_est, n_comps)
+            .fit(x_mat.as_ref());
+        let components = fit_act_ss.components();
+        let singular_vals = fit_act_ss.singular_vals();
         // compute sensitivity coeffs
-        let var_sensi = act_ss.var_diag_evd_sensi();
+        let var_sensi = fit_act_ss.var_diag_evd_sensi();
         // convert to python arrays
         let ndarray_pc: Array2<f64> = components.as_ref().into_ndarray().to_owned();
         let ndarray_pv: Array2<f64> = singular_vals.as_ref().into_ndarray().to_owned();

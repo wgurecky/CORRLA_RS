@@ -1,7 +1,7 @@
 About
 ================
 
-Correlation and Random Linear Algebra methods in Rust
+CORRLA-RS is a package for correlation, regression and random linear algebra methods in Rust.
 
 Methods
 ---
@@ -13,28 +13,33 @@ Random Linear Algebra Methods
 Applied Math Methods
 
 - Active Subspace Identification by KdTree and RSVD
-- PCA by RSVD
-- DMD by RSVD
-- POD by RSVD
+- Principle component analysis (PCA) by RSVD
+- Proper orthogonal decomposition (POD) by RSVD
+- Dynamic mode decomposition (DMD) by RSVD
+
+Global Sensitivity Methods
+
+- Active subspace based global sensitivity measure [1]
 
 Correlation Analysis Methods
 
-- Pearson Correlation calc
-- R-squared Sensitivity analysis
+- Pearson correlation
+- R-squared analysis
 
 Interpolation and Response Surfaces
 
 - N-D Radial basis function interpolation
 - Gaussian process regression (TODO)
 
-Sampling Methods
+Space Sampling Methods
 
-- Markov chain Monte Carlo (MCMC) samplers:
-  - Differential evolution MCMC (DEMC), parallel implementation.
-  - Differential evolution adaptive metropolis MCMC (DREAM), parallel implementation.
-- Multivariate (MV) distribution samplers:
-  - Dirichlet MV constrained sampler
-  - Others TBD
+- Dirichlet multivariate constrained sampler
+- Others TBD
+
+Markov chain Monte Carlo (MCMC) samplers:
+
+- Differential evolution MCMC (DEMC), parallel implementation.
+- Differential evolution adaptive metropolis MCMC (DREAM), parallel implementation.
 
 Distribution Functions
 
@@ -46,7 +51,10 @@ Distribution Functions
     - Gumbel
   - Pair-Copula constructions (Vine-Copula) (TODO)
 - Univariate
-  - TBD
+  - Normal
+  - Beta
+  - Exponential
+  - Kernel density
 
 Package Build
 -------------
@@ -55,17 +63,9 @@ Build this rust package with:
 
     cargo build
 
-Clean proj build with
-
-    cargo clean
-
 To run tests
 
     cargo test
-
-To run examples
-
-    cargo run --example ex1
 
 for an optimized build
 
@@ -104,6 +104,21 @@ Then in a python terminal to test:
     >>> comps, vals, sensi = corrla_rs.active_ss(x, y, est_order, n_neighbors, n_comps)
     >>> print(comps, vals, sensi)
 
+
+License
+-------
+
+Copyright© 2024-present, UT-Battelle, LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 Rust Setup
 ----------
@@ -160,4 +175,7 @@ add the following configuration to ~/.cargo/config:
     [build]
     rustc-wrapper = "sccache"
 
+References
+---
 
+[1] Constantine, Paul G., and Paul Diaz. "Global sensitivity metrics from active subspaces." Reliability Engineering & System Safety 162 (2017): 1-13.
