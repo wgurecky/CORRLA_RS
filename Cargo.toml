@@ -23,7 +23,7 @@ rand_distr = "*"
 num-traits = "*"
 num-complex = "*"
 ndarray = {version=">=0.15.6", features=["rayon"]}
-nalgebra = "*"
+# nalgebra = "*"
 faer = {version = "0.16.0", features = ["ndarray"]}
 faer-core = "0.16.0"
 faer-svd = "0.16.0"

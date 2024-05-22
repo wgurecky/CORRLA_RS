@@ -125,7 +125,7 @@ pub fn constr_dirichlet_sample(
     all_samples
 }
 
-struct McmcChain {
+pub struct McmcChain {
     samples: Array2<f64>,
     id: usize,
 }
@@ -172,7 +172,7 @@ impl LnProbFn for LnLikeCustom {
 }
 
 /// A flat prior
-struct LnPriorUniform {
+pub struct LnPriorUniform {
     bounds: Array2<f64>,
 }
 impl LnPriorUniform {
@@ -199,7 +199,7 @@ impl LnProbFn for LnPriorUniform {
 }
 
 /// A Dirichlet MV likelihood
-struct LnLikeDirichlet {
+pub struct LnLikeDirichlet {
     alpha: Vec<f64>,
 }
 impl LnLikeDirichlet {
@@ -229,7 +229,7 @@ impl LnProbFn for LnLikeDirichlet {
 }
 
 /// Compose the numerator of the Posterior PDF (prior * likelihood)
-struct LnLikeSum {
+pub struct LnLikeSum {
     like_fn: Box<dyn LnProbFn>,
     prior_fn: Box<dyn LnProbFn>,
 }
@@ -249,7 +249,7 @@ impl LnProbFn for LnLikeSum {
     }
 }
 
-struct DeMcSampler {
+pub struct DeMcSampler {
     chains: Vec<McmcChain>,
     chains_id: Vec<usize>,
     gamma: f64,

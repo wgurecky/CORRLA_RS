@@ -103,6 +103,69 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         ndarray_samples.into_pyarray(py)
     }
 
+    #[pyfn(m)]
+    fn cs_mcmc_dirichlet_sample<'py>(py: Python<'py>,
+        np_bounds: PyReadonlyArray2<'py, f64>,
+        n_samples: usize,
+        n_seed_samples: usize,
+        max_zshots: usize,
+        chunk_size: usize,
+        c_scale: f64,
+        np_alphas: PyReadonlyArray1<'py, f64>,
+        gamma: f64,
+        var_epsilon: f64,
+        ) -> (&'py PyArray2<f64>, f64)
+    {
+        let bounds = np_bounds.as_array();
+        let vec_alphas = Some(np_alphas.as_array().to_vec());
+        // draw seed samples for second mcmc stage
+        let diri_samples = constr_dirichlet_sample(
+            bounds, n_seed_samples, max_zshots,
+            chunk_size, c_scale, vec_alphas.clone());
+
+        // Setup ln likelihood
+        // alpha args to target dirichelt is 1, we want uniform samples in z
+        let target_dirichlet_alphas = vec![1.0; vec_alphas.unwrap().len()];
+        let tst_ln_like = LnLikeDirichlet::new(&target_dirichlet_alphas);
+        // Setup ln prior
+        let tst_ln_prior = LnPriorUniform::new(bounds.view());
+        // construct likelihood*prior
+        let tst_ln_like_prior = LnLikeSum::new(tst_ln_like, tst_ln_prior);
+        // define fixup function as a lambda fn
+        let proposal_fix_fn = move | x: ArrayView1<f64> | -> Array1<f64> {
+            let mut new_x = x.to_owned();
+            // must sum to c_scale (typically 1.0)
+            new_x = c_scale * new_x.clone() / new_x.sum();
+            new_x
+        };
+        let n_chains = diri_samples.nrows();
+        // setup parallel mcmc chains for demc sampler
+        let mut tst_chains: Vec<McmcChain> = Vec::new();
+        for (c, seed_s) in diri_samples.rows().into_iter().enumerate() {
+            println!("seed i: {:?}, x: {:?}, x_sum: {:?}", c, seed_s, seed_s.sum());
+            tst_chains.push(McmcChain::new(3, seed_s, c));
+        }
+        // init the MCMC sampler
+        let ndim = bounds.nrows();
+        // var_epsilon typically 1.0e-12 (move jitter factor)
+        // gamma typically 0.8 (move shrink factor)
+        let mut mcmc_sampler =
+            DeMcSampler::new(tst_ln_like_prior, tst_chains, ndim,
+                             gamma, var_epsilon);
+        // specify the proposal fixup function
+        mcmc_sampler.set_prop_fixup(proposal_fix_fn);
+
+        // draw samples
+        mcmc_sampler.sample_mcmc_par(n_samples);
+        // acceptance ratio
+        let ar = mcmc_sampler.accept_ratio();
+
+        // return samples
+        let samples = mcmc_sampler.get_samples(n_samples);
+        let ndarray_samples = samples.to_owned();
+        (ndarray_samples.into_pyarray(py), ar)
+    }
+
     // Add classes to module
     m.add_class::<PyRbfInterp>()?;
     m.add_class::<PyPodI>()?;
