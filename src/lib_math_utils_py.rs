@@ -15,12 +15,12 @@ use crate::lib_math_utils::pca_rsvd::{PcaRsvd};
 use crate::lib_math_utils::active_subspaces::{ActiveSsRsvd, PolyGradientEstimator};
 
 #[pymodule]
-fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
+fn corrla_rs<'py>(_py: Python<'py>, m: &Bound<'py, PyModule>)
     -> PyResult<()>
 {
     #[pyfn(m)]
     fn rsvd<'py>(py: Python<'py>, a_mat: PyReadonlyArray2<'py, f64>, n_rank: usize, n_iters: usize, n_oversamples: usize)
-        -> (&'py PyArray2<f64>, &'py PyArray2<f64>, &'py PyArray2<f64>)
+        -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)
     {
         // convert numpy array into rust ndarray and
         // convert to faer-rs matrix
@@ -32,7 +32,7 @@ fn corrla_rs<'py>(_py: Python<'py>, m: &'py PyModule)
         let ndarray_sr: Array2<f64> = sr.as_ref().into_ndarray().to_owned();
         let ndarray_ur: Array2<f64> = ur.as_ref().into_ndarray().to_owned();
         let ndarray_vr: Array2<f64> = vr.as_ref().into_ndarray().to_owned();
-        (ndarray_ur.into_pyarray(py), ndarray_sr.into_pyarray(py), ndarray_vr.into_pyarray(py))
+        (ndarray_ur.into_pyarray_bound(py), ndarray_sr.into_pyarray_bound(py), ndarray_vr.into_pyarray_bound(py))
     }
 
     #[pyfn(m)]

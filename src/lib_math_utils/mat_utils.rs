@@ -39,6 +39,7 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
     T: faer::RealField + Float
 {
     let x_svd = x.svd();
+    // x_svd.pseudoinverse()
     let u = x_svd.u();
     let eps = T::from(1.0e-14).unwrap();
     let s_vec = x_svd.s_diagonal();
@@ -55,6 +56,7 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
 pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
 {
     let x_svd = x.svd();
+    // x_svd.pseudoinverse()
     let u = x_svd.u();
     let eps = c64::new(1.0e-16, 1.0e-16);
     let comp_one = c64::new(1.0, 0.0);
