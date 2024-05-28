@@ -382,7 +382,7 @@ pub fn mat_diagref_to_2d<T>(diag: DiagRef<T>) -> Mat<T>
     where
     T: faer::ComplexField
 {
-    diag.column_vector().as_2d().to_owned()
+    mat_colmat_to_diag(diag.column_vector()).to_owned()
 }
 
 /// pseudo inv of diag matrix

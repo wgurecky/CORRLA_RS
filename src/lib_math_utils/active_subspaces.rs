@@ -262,7 +262,7 @@ impl ActiveSsRsvd {
         let eig_vs = evd.u();
         // split real from complex part, discard imag parts (zero)
         let (real_eigs, _imag_eigs) =
-            mat_parts_from_complex(eigs.column_vector().as_2d().as_ref());
+            mat_parts_from_complex(mat_diagref_to_2d(eigs).as_ref());
         let (real_eig_vs, _imag_eig_vs) =
             mat_parts_from_complex(eig_vs);
         // sort eigenvalues and eigenvectors from largest to smallest

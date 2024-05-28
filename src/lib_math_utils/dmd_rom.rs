@@ -114,7 +114,7 @@ impl <'a> DMDc <'a> {
         //    self._A.as_ref().unwrap().as_ref());
         let ev: Eigendecomposition<c64> = (self._A.as_ref()).unwrap().eigendecomposition();
         let a_til_eigenvectors = ev.u();
-        let a_til_eigenvalues = ev.s().column_vector().as_2d();
+        let a_til_eigenvalues = mat_diagref_to_2d(ev.s());
         // convert to real and imag components
         let (a_til_eigenvectors_re, a_til_eigenvectors_im) =
             mat_parts_from_complex(a_til_eigenvectors);
@@ -127,8 +127,7 @@ impl <'a> DMDc <'a> {
     /// Computes DMD modes
     fn _calc_modes(&mut self, omega: MatRef<f64>, v_til: MatRef<f64>, s_til: MatRef<f64>, u_til_1: MatRef<f64>, u_hat: MatRef<f64>) {
         let (lambdas, w_re, w_im) = self._calc_eigs();
-        let lambdas_diag: Mat<c64> = mat_colvec_to_diag(lambdas.as_ref());
-        self.lambdas = Some(lambdas_diag);
+        self.lambdas = Some(lambdas);
         // from eq 36 in Proctor. et. al DMDc
         // BUT we only need the real part of the modes, since
         // when we recombine with
