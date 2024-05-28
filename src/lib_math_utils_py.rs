@@ -3,8 +3,9 @@ use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArray1,
 use pyo3::{exceptions::PyRuntimeError, pyclass, pymodule, types::PyModule, PyResult, Python};
 use pyo3::prelude::*;
 
-use faer::{mat, Mat, MatRef, IntoFaer, IntoNdarray};
-use faer::{prelude::*};
+use faer::prelude::*;
+use faer::Mat;
+use faer_ext::*;
 use crate::lib_math_utils::dmd_rom::*;
 use crate::lib_math_utils::space_samplers::*;
 use crate::lib_math_utils::pod_rom::*;

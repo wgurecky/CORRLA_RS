@@ -9,16 +9,13 @@
 /// Where u_t is the control or forcing term
 /// and x_t is the state vector.
 use faer::{prelude::*};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut, ColMut};
-use faer_core::{ComplexField, RealField, c32, c64};
-use faer::solvers::{Eigendecomposition};
-use num_traits::Float;
+use faer::{mat, Mat, MatRef, MatMut};
+use faer::solvers::Eigendecomposition;
 use std::marker;
 
 // internal imports
 use crate::lib_math_utils::mat_utils::*;
 use crate::lib_math_utils::random_svd::*;
-use crate::lib_math_utils::interp_utils::*;
 
 pub struct DMDc <'a> {
     // number of supplied data snapshots
@@ -117,7 +114,7 @@ impl <'a> DMDc <'a> {
         //    self._A.as_ref().unwrap().as_ref());
         let ev: Eigendecomposition<c64> = (self._A.as_ref()).unwrap().eigendecomposition();
         let a_til_eigenvectors = ev.u();
-        let a_til_eigenvalues = ev.s_diagonal().as_2d();
+        let a_til_eigenvalues = ev.s().column_vector().as_2d();
         // convert to real and imag components
         let (a_til_eigenvectors_re, a_til_eigenvectors_im) =
             mat_parts_from_complex(a_til_eigenvectors);

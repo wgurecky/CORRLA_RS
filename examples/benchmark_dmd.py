@@ -34,7 +34,7 @@ def build_snapshots():
     p_snapshots = np.asarray(p_snapshots).T
     plot_snapshots(x_points, t_points, p_snapshots)
 
-    return p_snapshots, u_seq
+    return x_points, p_snapshots, u_seq
 
 
 def plot_snapshots(x_points, t_points, p_snapshots):
@@ -77,7 +77,7 @@ def predict_dmdc(pydmdc_model: DMDc, x0, u_seq):
     return np.hstack(predicted_x)
 
 def fit_pydmd():
-    p_snapshots, u_seq = build_snapshots()
+    x_points, p_snapshots, u_seq = build_snapshots()
     n_modes = 12
     ti = time.time()
     pydmdc_model = DMDc(svd_rank=n_modes, svd_rank_omega=n_modes)
@@ -95,19 +95,26 @@ def fit_pydmd():
     #print("pydmdc modes: ", pydmdc_model.modes)
 
     # forecast
-    predicted = predict_dmdc(pydmdc_model,
-                             p_snapshots[:, 0:1],
-                             u_seq[:, 1:]
-                             )
+    x0 = p_snapshots[:, 0:1]
+    u_s = u_seq[:, 1:]
+    predicted = predict_dmdc(pydmdc_model, x0, u_s)
 
     print("pydmdc predicted: ", predicted[:, 20])
     print("pydmdc expected: ", p_snapshots[:, 20])
 
+    plt.figure()
+    for i in range(0, predicted.shape[1]-1):
+        plt.plot(x_points, predicted[:, i], label="step: %d, u: %0.2f" % (i, u_s[0, i]))
+    plt.legend()
+    plt.title("PyDMD DMDc prediction")
+    plt.savefig("pydmdc_pydmd_predict.png")
+    plt.close()
+
 
 def fit_corrla_dmd():
-    p_snapshots, u_seq = build_snapshots()
+    x_points, p_snapshots, u_seq = build_snapshots()
     n_modes = 12
-    n_iters = 10
+    n_iters = 20
     ti = time.time()
     rust_dmdc = PyDMDc(p_snapshots, u_seq, n_modes, n_iters)
     tf = time.time()
@@ -118,6 +125,14 @@ def fit_corrla_dmd():
     predicted = rust_dmdc.predict(x0, u_s)
     print("corrla dmdc predicted: ", predicted[:, 20])
     print("corrla dmdc expected: ", p_snapshots[:, 20])
+
+    plt.figure()
+    for i in range(0, predicted.shape[1]):
+        plt.plot(x_points, predicted[:, i], label="step: %d, u: %0.2f" % (i, u_s[0, i]))
+    plt.legend()
+    plt.title("CORRLA-RS DMDc prediction")
+    plt.savefig("pydmdc_corrla_predict.png")
+    plt.close()
 
 
 if __name__ == "__main__":

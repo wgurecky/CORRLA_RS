@@ -7,8 +7,8 @@
 /// Ex: estimate the pressure field as a function of angle of attack
 /// using a few pre-computed CFD snapshots.  The POD model interpolates
 /// the CFD data to obtain an estimated pressure field at any attack angle.
-use faer::{prelude::*};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer::prelude::*;
+use faer::{mat, Mat, MatRef, MatMut};
 use num_traits::Float;
 
 // internal imports

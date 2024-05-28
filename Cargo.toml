@@ -23,13 +23,12 @@ rand_distr = "*"
 num-traits = "*"
 num-complex = "*"
 ndarray = {version=">=0.15.6", features=["rayon"]}
-# nalgebra = "*"
-faer = {version = "0.16.0", features = ["ndarray"]}
-faer-core = "0.16.0"
-faer-svd = "0.16.0"
+faer = {version = "0.19.0"}
+faer-ext = {version="*", features=["ndarray"]}
 rayon = "*"
 pyo3 = {version = "0.20", features = ["extension-module"]}
 numpy = "0.20"
-# kiddo = "3.0.0"
 kdtree = "0.7.0"
+# nalgebra = "*"
+# kiddo = "3.0.0"
 # cudarc = { version = "*", default-features = false, optional = true, features = ["driver", "cublas", "nvrtc"] }
