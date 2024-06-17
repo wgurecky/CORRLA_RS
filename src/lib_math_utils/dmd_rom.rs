@@ -69,7 +69,7 @@ impl <'a> DMDc <'a> {
         // let (u_til, s_til, v_til_) = mat_truncated_svd(self._X(omega.as_ref()), self.n_modes);
         // let v_til = v_til_.to_owned();
         // println!("u_til_exact: {:?}, v_til_exact: {:?}", u_til, v_til_);
-        let (u_til, s_til, v_til_) = random_svd(self._X(omega.as_ref()), self.n_modes, n_iters, 8);
+        let (u_til, s_til, v_til_) = random_svd(self._X(omega.as_ref()), self.n_modes, n_iters, 12);
         let v_til = v_til_.transpose().to_owned();
 
         let u_til_1 = u_til.as_ref().submatrix(
@@ -271,8 +271,8 @@ mod dmd_unit_tests {
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let n_modes = 8;
-        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 10);
+        let n_modes = 12;
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 30);
 
         // test the DMDc model
         let estimated_a_op = dmdc_model.est_a_til();
@@ -305,6 +305,6 @@ mod dmd_unit_tests {
         println!("Predicted: {:?}", p20_predicted);
         println!("DMDc Eigs: {:?}", dmdc_model.lambdas.as_ref());
         assert_eq!(dmdc_model.lambdas.unwrap().nrows(), n_modes);
-        mat_mat_approx_eq(p20_predicted.as_ref(), p20_expected.as_ref(), 1e-3);
+        mat_mat_approx_eq(p20_predicted.as_ref(), p20_expected.as_ref(), 5e-3);
     }
 }

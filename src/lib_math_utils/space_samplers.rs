@@ -487,11 +487,11 @@ mod space_samplers_unit_tests {
         let mut tst_mcmc_sampler = DeMcSampler::new(tst_ln_like_prior, tst_chains, 1, 0.8, 1.0e-10);
 
         // draw samples
-        let n_samples: usize = 1000;
+        let n_samples: usize = 5000;
         tst_mcmc_sampler.sample_mcmc(n_samples);
 
         // Check the estimated mean and var against known]
-        let tst_samples = tst_mcmc_sampler.get_samples(500);
+        let tst_samples = tst_mcmc_sampler.get_samples(2000);
         let ar = tst_mcmc_sampler.accept_ratio();
         println!("MCMC Samples: {:?}", tst_samples);
         println!("Accept ratio: {:?}", ar);
@@ -554,13 +554,13 @@ mod space_samplers_unit_tests {
         tst_mcmc_sampler.set_prop_fixup(proposal_fix_fn);
 
         // draw samples
-        let n_samples: usize = 1000;
+        let n_samples: usize = 5000;
         tst_mcmc_sampler.sample_mcmc_par(n_samples);
         let ar = tst_mcmc_sampler.accept_ratio();
         println!("Accept ratio: {:?}", ar);
 
         // TODO: check samples
-        let tst_samples = tst_mcmc_sampler.get_samples(500/8);
+        let tst_samples = tst_mcmc_sampler.get_samples(2000/8);
         println!("MCMC Diriclet Samples: {:?}", tst_samples);
         // assert_eq!(tst_samples.nrows(), n_samples);
         for (_i, sample) in tst_samples.axis_iter(Axis(0)).enumerate() {
