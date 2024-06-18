@@ -5,11 +5,10 @@
 use assert_approx_eq::assert_approx_eq;
 use rand_distr::{Normal, Distribution, Beta, Exp};
 use rand::Rng;
-use rand::seq::index;
 use rayon::prelude::*;
 use itertools::Itertools;
 use ndarray::prelude::*;
-use statrs::function::{erf, gamma::{gamma, self}, beta::beta_reg};
+use statrs::function::{erf, gamma::gamma, beta::beta_reg};
 use std::f64::consts::PI;
 use finitediff::FiniteDiff;
 use argmin::{

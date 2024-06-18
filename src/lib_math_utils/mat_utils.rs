@@ -4,11 +4,12 @@
 /// library, but are generally missing from rust libs
 ///
 use num_traits::Float;
-use faer::{prelude::*, IntoNdarray};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
-use faer_core::ColRef;
-use faer_core::{c64, c32};
-use rand::{prelude::*};
+use faer::prelude::*;
+use faer::linalg::matmul;
+use faer::{mat, Mat, MatRef, ColRef, MatMut};
+use faer::diag::{DiagRef};
+use faer_ext::*;
+use rand::prelude::*;
 use rand_distr::{StandardNormal, Uniform};
 use rayon::prelude::*;
 use ndarray::prelude::*;
@@ -18,16 +19,16 @@ use ndarray::prelude::*;
 /// parallel control exposed
 pub fn par_matmul_helper<T>(res: MatMut<T>, lhs: MatRef<T>, rhs: MatRef<T>, beta: T, n_threads: usize)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
-    faer_core::mul::matmul(
+    matmul::matmul(
         res,
         lhs,
         rhs,
         None,
         beta,
-        // faer_core::Parallelism::Rayon(n_threads),
-        faer_core::get_global_parallelism()
+        // faer::Parallelism::Rayon(n_threads),
+        faer::get_global_parallelism()
         );
 }
 
@@ -35,9 +36,10 @@ pub fn par_matmul_helper<T>(res: MatMut<T>, lhs: MatRef<T>, rhs: MatRef<T>, beta
 /// Compute the Moore-Penrose inverse
 pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let x_svd = x.svd();
+    // x_svd.pseudoinverse()
     let u = x_svd.u();
     let eps = T::from(1.0e-14).unwrap();
     let s_vec = x_svd.s_diagonal();
@@ -45,7 +47,7 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
     let mut s_inv_mat = faer::Mat::zeros(x.ncols(), x.nrows());
     for i in 0..s_vec.nrows(){
         s_inv_mat.write(i, i, T::from(1.).unwrap() /
-                        (s_vec.read(i, 0) + eps));
+                        (s_vec.read(i) + eps));
     }
     v * s_inv_mat * u.transpose()
 }
@@ -54,6 +56,7 @@ pub fn mat_pinv<T>(x: MatRef<T>) -> Mat<T>
 pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
 {
     let x_svd = x.svd();
+    // x_svd.pseudoinverse()
     let u = x_svd.u();
     let eps = c64::new(1.0e-16, 1.0e-16);
     let comp_one = c64::new(1.0, 0.0);
@@ -62,7 +65,7 @@ pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
     let mut s_inv_mat: Mat<c64> = faer::Mat::zeros(x.ncols(), x.nrows());
     for i in 0..s_vec.nrows(){
         s_inv_mat.write(i, i, comp_one /
-                        (s_vec.read(i, 0) + eps));
+                        (s_vec.read(i) + eps));
     }
     v * s_inv_mat * u.adjoint()
 }
@@ -70,11 +73,11 @@ pub fn mat_pinv_comp(x: MatRef<c64>) -> Mat<c64>
 /// Truncated SVD
 pub fn mat_truncated_svd<T>(my_mat: MatRef<T>, rank: usize) -> (Mat<T>, Mat<T>, Mat<T>)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let my_svd = my_mat.svd();
     let u_r = my_svd.u().get(.., 0..rank).to_owned();
-    let s_r = my_svd.s_diagonal().get(0..rank, ..).to_owned();
+    let s_r = my_svd.s_diagonal().get(0..rank).as_2d().to_owned();
     let v_r = my_svd.v().get(.., 0..rank).to_owned();
     (u_r, s_r, v_r)
 }
@@ -83,7 +86,7 @@ pub fn mat_truncated_svd<T>(my_mat: MatRef<T>, rank: usize) -> (Mat<T>, Mat<T>, 
 /// Computes mean along axis
 pub fn mat_mean<T>(a_mat: MatRef<T>, axis: usize) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut acc: T = T::from(0.0).unwrap();
     let a_ncols: usize = a_mat.ncols();
@@ -118,7 +121,7 @@ pub fn mat_mean<T>(a_mat: MatRef<T>, axis: usize) -> Mat<T>
 /// Computes std dev along axis
 pub fn mat_std<T>(a_mat: MatRef<T>, axis: usize) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut acc: T = T::from(0.0).unwrap();
     let a_ncols: usize = a_mat.ncols();
@@ -158,7 +161,7 @@ pub fn mat_std<T>(a_mat: MatRef<T>, axis: usize) -> Mat<T>
 pub fn random_mat_normal<T>(n_rows: usize, n_cols: usize)
     -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let omega: Mat<T> = Mat::from_fn(
         n_rows,
@@ -175,7 +178,7 @@ pub fn random_mat_normal<T>(n_rows: usize, n_cols: usize)
 pub fn random_mat_uniform<T>(n_rows: usize, n_cols: usize, lb: f64, ub: f64)
     -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let uni_dist = Uniform::new(lb, ub);
     let omega: Mat<T> = Mat::from_fn(
@@ -256,7 +259,7 @@ pub fn mat_vec_add(x: MatRef<f64>, pv: MatRef<f64>, axis: usize)
 /// Raise all elements in a matrix to a power
 pub fn mat_ele_pow<T>(a_mat: MatRef<T>, pwr: T) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut out_mat = a_mat.to_owned();
     for i in 0..out_mat.nrows() {
@@ -270,7 +273,7 @@ pub fn mat_ele_pow<T>(a_mat: MatRef<T>, pwr: T) -> Mat<T>
 /// Element by element matrix multiplication
 pub fn mat_mat_ele_mul<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut out_mat = a.to_owned();
     for i in 0..out_mat.nrows() {
@@ -284,7 +287,7 @@ pub fn mat_mat_ele_mul<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
 /// Peforms matrix scalar addition in-place
 pub fn mat_scalar_add<T>(mut out_mat: MatMut<T>, b: T)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     // consume a, modify in-place
     for i in 0..out_mat.nrows() {
@@ -297,7 +300,7 @@ pub fn mat_scalar_add<T>(mut out_mat: MatMut<T>, b: T)
 /// Modifies matrix row in-place
 pub fn mat_row_mod<T>(mut out_mat: MatMut<T>, row: usize, vec: MatRef<T>)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     for j in 0..vec.ncols() {
         out_mat.write(row, j, vec.read(0, j));
@@ -307,7 +310,7 @@ pub fn mat_row_mod<T>(mut out_mat: MatMut<T>, row: usize, vec: MatRef<T>)
 /// Modifies matrix col in-place
 pub fn mat_col_mod<T>(mut out_mat: MatMut<T>, col: usize, vec: MatRef<T>)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     for i in 0..vec.nrows() {
         out_mat.write(i, col, vec.read(i, 0));
@@ -342,7 +345,7 @@ pub fn mat_parts_from_complex(a_comp: MatRef<c64>) -> (Mat<f64>, Mat<f64>) {
 /// converts a col vector to a diagnoal matrix
 pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::ComplexField
+    T: faer::ComplexField
 {
     let mut out_mat = faer::Mat::zeros(vec.nrows(), vec.nrows());
     for i in 0..vec.nrows() {
@@ -354,7 +357,7 @@ pub fn mat_colvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
 /// converts a col mat to a diagnoal matrix
 pub fn mat_colmat_to_diag<T>(vec: ColRef<T>) -> Mat<T>
     where
-    T: faer_core::ComplexField
+    T: faer::ComplexField
 {
     let mut out_mat = faer::Mat::zeros(vec.nrows(), vec.nrows());
     for i in 0..vec.nrows() {
@@ -367,7 +370,7 @@ pub fn mat_colmat_to_diag<T>(vec: ColRef<T>) -> Mat<T>
 /// converts a row vector to a diagnoal matrix
 pub fn mat_rowvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut out_mat = faer::Mat::zeros(vec.ncols(), vec.ncols());
     for i in 0..vec.ncols() {
@@ -376,10 +379,18 @@ pub fn mat_rowvec_to_diag<T>(vec: MatRef<T>) -> Mat<T>
     out_mat
 }
 
+/// converts a DiagRef to a diagnoal in 2d matrix
+pub fn mat_diagref_to_2d<T>(diag: DiagRef<T>) -> Mat<T>
+    where
+    T: faer::ComplexField
+{
+    mat_colmat_to_diag(diag.column_vector()).to_owned()
+}
+
 /// pseudo inv of diag matrix
 pub fn mat_pinv_diag<T>(diag_mat: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let eps = T::from(1.0e-20).unwrap();
     let mut out_mat = faer::Mat::zeros(diag_mat.nrows(), diag_mat.ncols());
@@ -398,7 +409,7 @@ pub fn mat_pinv_diag<T>(diag_mat: MatRef<T>) -> Mat<T>
 /// create a owned Vec from row, results in data copy
 pub fn mat_row_to_vec<T>(a_mat: MatRef<T>, row: usize) -> Vec<T>
     where
-    T: faer_core::SimpleEntity
+    T: faer::SimpleEntity
 {
     let tmp_ndarray = a_mat.get(row..row+1, ..).into_ndarray();
     let tmp_1darray: Array1<T> = tmp_ndarray.remove_axis(Axis(0)).to_owned();
@@ -408,7 +419,7 @@ pub fn mat_row_to_vec<T>(a_mat: MatRef<T>, row: usize) -> Vec<T>
 /// create a owned Vec from col, results in data copy
 pub fn mat_col_to_vec<T>(a_mat: MatRef<T>, col: usize) -> Vec<T>
     where
-    T: faer_core::SimpleEntity
+    T: faer::SimpleEntity
 {
     let tmp_ndarray = a_mat.get(.., col..col+1).into_ndarray();
     let tmp_1darray: Array1<T> = tmp_ndarray.remove_axis(Axis(1)).to_owned();
@@ -418,7 +429,7 @@ pub fn mat_col_to_vec<T>(a_mat: MatRef<T>, col: usize) -> Vec<T>
 /// create a owned Vec from mat diag, results in data copy
 pub fn mat_diag_to_vec<T>(a_mat: MatRef<T>) -> Vec<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut diag_vec: Vec<T> = Vec::new();
     for i in 0..a_mat.ncols() {
@@ -431,7 +442,7 @@ pub fn mat_diag_to_vec<T>(a_mat: MatRef<T>) -> Vec<T>
 /// TODO: make this work for real and imag vecs
 pub fn argsort_float<T>(a: &[T]) -> Vec<usize>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut idx = (0..a.len()).collect::<Vec<_>>();
     idx.sort_by(|&i, &j| a[i].partial_cmp(&a[j]).unwrap());
@@ -440,7 +451,7 @@ pub fn argsort_float<T>(a: &[T]) -> Vec<usize>
 /// Returns indicies that would sort a vec of floats, high to lowest
 pub fn argsort_float_rev<T>(a: &[T]) -> Vec<usize>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut idx = (0..a.len()).collect::<Vec<_>>();
     idx.sort_by(|&i, &j| a[j].partial_cmp(&a[i]).unwrap());
@@ -452,7 +463,7 @@ pub fn argsort_float_rev<T>(a: &[T]) -> Vec<usize>
 /// Only works for real matricies. TODO: fix for both real and complex mats
 pub fn sort_evd<T>(eigs: MatRef<T>, eigvs: MatRef<T>) -> (Mat<T>, Mat<T>)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let dim = eigs.ncols();
     // compute ordering
@@ -529,7 +540,7 @@ pub fn zcenter_mat_col(a_mat: MatRef<f64>) -> Mat<f64>
 // Helper function to ensure two matrix are almost equal
 pub fn mat_mat_approx_eq<T>(a: MatRef<T>, b: MatRef<T>, tol: T)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     use assert_approx_eq::assert_approx_eq;
     assert_eq!(a.ncols(), b.ncols());
@@ -545,7 +556,7 @@ pub fn mat_mat_approx_eq<T>(a: MatRef<T>, b: MatRef<T>, tol: T)
 // Helper function to ensure all matrix ele are close to const
 pub fn mat_scale_approx_eq<T>(a: MatRef<T>, b: T, tol: T)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     use assert_approx_eq::assert_approx_eq;
     for j in 0..a.ncols() {
@@ -559,7 +570,7 @@ pub fn mat_scale_approx_eq<T>(a: MatRef<T>, b: T, tol: T)
 // Stack two matrix together, horizontally
 pub fn mat_hstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     assert!(a.nrows() == b.nrows());
     let o_nrows = a.nrows();
@@ -583,7 +594,7 @@ pub fn mat_hstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
 // Stack two matrix together, vertically
 pub fn mat_vstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     assert!(a.ncols() == b.ncols());
     let o_nrows = a.nrows() + b.nrows();
@@ -606,7 +617,7 @@ pub fn mat_vstack<T>(a: MatRef<T>, b: MatRef<T>) -> Mat<T>
 /// Produces a single column vector of elements evenly spaced
 pub fn mat_linspace<T>(start: T, end: T, n_steps: usize) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut o_mat = faer::Mat::zeros(n_steps, 1);
     let delta = (end - start) / (T::from(n_steps).unwrap());
@@ -620,7 +631,7 @@ pub fn mat_linspace<T>(start: T, end: T, n_steps: usize) -> Mat<T>
 /// Modifies the input matrix in-place
 pub fn mat_set_col<T>(mut a_mat: MatMut<T>, col: usize, col_mat: MatRef<T>)
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     for i in 0..col_mat.nrows() {
         a_mat.write(i, col, col_mat.read(i, 0) );
@@ -630,7 +641,7 @@ pub fn mat_set_col<T>(mut a_mat: MatMut<T>, col: usize, col_mat: MatRef<T>)
 /// Converts a rust Vec into a faer Mat.  Done by a data copy (can be expensive)
 pub fn mat_from_vec<T>(in_vec: &Vec<T>) -> Mat<T>
     where
-    T: faer_core::RealField + Float
+    T: faer::RealField + Float
 {
     let mut o_mat: Mat<T> = faer::Mat::zeros(in_vec.len(), 1);
     for (i, ele) in in_vec.into_iter().enumerate() {

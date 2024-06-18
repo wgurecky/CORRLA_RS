@@ -1,8 +1,8 @@
 // Principle component analysis (PCA) using
 // randomized svd methods.
 use std::cmp;
-use faer::{prelude::*};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer::prelude::*;
+use faer::{mat, Mat, MatRef, MatMut};
 
 // internal imports
 use crate::lib_math_utils::mat_utils::*;

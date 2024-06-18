@@ -1,6 +1,6 @@
 /// Interpolation utility methods
-use faer::{prelude::*, IntoNdarray};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
+use faer::prelude::*;
+use faer::{mat, Mat, MatRef, MatMut};
 
 // internal imports
 use crate::lib_math_utils::mat_utils::*;

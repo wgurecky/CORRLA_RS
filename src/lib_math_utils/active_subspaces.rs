@@ -6,14 +6,10 @@
 /// practice. https://arxiv.org/pdf/1304.2070.pdf
 ///
 use std::cmp;
-use assert_approx_eq::assert_approx_eq;
-use faer::{prelude::*, IntoFaer};
-use faer_core::{mat, Mat, MatRef, MatMut, Entity, AsMatRef, AsMatMut};
-use faer_core::{ComplexField, RealField, c32, c64};
-use faer::solvers::{Eigendecomposition};
-// use kiddo::{KdTree, SquaredEuclidean};
+use faer::prelude::*;
+use faer_ext::*;
+use faer::solvers::Eigendecomposition;
 use kdtree::KdTree;
-use kdtree::ErrorKind;
 use kdtree::distance::squared_euclidean;
 use ndarray::prelude::*;
 use rayon::prelude::*;
@@ -21,7 +17,6 @@ use rayon::prelude::*;
 use crate::lib_math_utils::mat_utils::*;
 use crate::lib_math_utils::random_svd::*;
 use crate::lib_math_utils::stats_corr::*;
-use crate::lib_math_utils::pca_rsvd::{ApplyTransform};
 
 /// Stores owned data for gradient estimation
 /// over point cloud datasets
@@ -263,11 +258,11 @@ impl ActiveSsRsvd {
         assert!(grad_mat_sc.ncols() == x_mat.ncols());
         // all eigenvalues of a real sym mat are real
         let evd: Eigendecomposition<c64> = grad_mat_sc.eigendecomposition();
-        let eigs = evd.s_diagonal();
+        let eigs = evd.s();
         let eig_vs = evd.u();
         // split real from complex part, discard imag parts (zero)
         let (real_eigs, _imag_eigs) =
-            mat_parts_from_complex(mat_colmat_to_diag(eigs).as_ref());
+            mat_parts_from_complex(mat_diagref_to_2d(eigs).as_ref());
         let (real_eig_vs, _imag_eig_vs) =
             mat_parts_from_complex(eig_vs);
         // sort eigenvalues and eigenvectors from largest to smallest
@@ -287,6 +282,7 @@ impl ActiveSsRsvd {
 mod active_subspace_unit_tests {
     // bring everything from above (parent) module into scope
     use super::*;
+    use assert_approx_eq::assert_approx_eq;
 
     #[test]
     fn test_grad_est() {
