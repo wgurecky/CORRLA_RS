@@ -1,7 +1,7 @@
 About
 ================
 
-![status](https://github.com/wgurecky/CORRLA_RS/.github/workflows/rust.yml/badge.svg)
+![status](https://github.com/wgurecky/CORRLA_RS/actions/workflows/rust.yml/badge.svg)
 
 CORRLA-RS is a package for correlation, regression and random linear algebra methods in Rust.
 
