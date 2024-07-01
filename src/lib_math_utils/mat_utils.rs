@@ -196,11 +196,12 @@ pub fn random_mat_uniform<T>(n_rows: usize, n_cols: usize, lb: f64, ub: f64)
 /// Applies a scalar function to each element of x
 /// returns a new matrix with each element modified
 /// by the fn fn_x
-/// pub fn scalar_fn_mat(x: MatRef<f64>, fn_x: &dyn FnMut(f64)->f64)
-pub fn mat_scalar_fn(x: MatRef<f64>, fn_x: &dyn Fn(f64)->f64)
-    -> Mat<f64>
+pub fn mat_scalar_fn<T>(x: MatRef<T>, fn_x: &dyn Fn(T)->T)
+    -> Mat<T>
+    where
+    T: faer::RealField + Float + faer::SimpleEntity
 {
-    let mut out_mat: Mat<f64> = x.to_owned();
+    let mut out_mat: Mat<T> = x.to_owned();
     for j in 0..out_mat.ncols() {
         out_mat.col_as_slice_mut(j)
             .into_iter()
@@ -209,12 +210,6 @@ pub fn mat_scalar_fn(x: MatRef<f64>, fn_x: &dyn Fn(f64)->f64)
     out_mat
 }
 
-/// Computes matrix*av av is a vec along axis
-/// mul vec row by row or col by col
-// pub fn mat_vec_mul(x: MatRef<f64>, av: MatRef<f64>, axis: usize)
-//     -> Mat<f64>
-// {
-// }
 
 /// Adds entries of a 1d vec to each column
 pub fn mat_vec_col_add(a_mat: MatRef<f64>, in_vec: MatRef<f64>) -> Mat<f64>
@@ -514,20 +509,7 @@ pub fn zcenter_mat_col(a_mat: MatRef<f64>) -> Mat<f64>
     let mut out_mat: Mat<f64> = a_mat.to_owned(); // clone happens here
     let col_avgs = mat_mean(a_mat, 1);
     let col_stds = mat_std(a_mat, 1);
-    // parallel iterator over cols
-//     out_mat.par_col_chunks_mut(1).enumerate()
-//         .for_each(|(j, mut col)|
-//                   for i in 0..col.nrows() {
-//                       col[(i, 0)] =
-//                         (col[(i, 0)] - col_avgs.read(0, j)) / col_stds.read(0, j);
-//                   }
-//                  );
     for j in 0..out_mat.ncols() {
-        // for ele in out_mat.col_as_slice_mut(j){
-        //     *ele = (*ele - col_avgs.read(0, j)) / col_stds.read(0, j);
-        // }
-        // shorthand for above using closure
-        // to modify elements of mutable iterator in-place
         out_mat.col_as_slice_mut(j)
             .into_iter()
             .for_each(|ele| *ele = (*ele - col_avgs.read(0, j))
@@ -718,6 +700,22 @@ mod mat_utils_unit_tests {
         print!("std x: {:?}", std_x);
         // std should be 1
         mat_scale_approx_eq(std_x.as_ref(), 1.0, 1.0e-1f64);
+    }
+
+    #[test]
+    fn test_matrix_scalar_fn() {
+        let a_tst = faer::mat![
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ];
+        let expected = faer::mat![
+            [1.0, 4.0],
+            [9.0, 16.0],
+        ];
+        // create scalar function to square entries in the matrix
+        let scalar_fn = |x: f64| -> f64 { x.powf(2.0) };
+        let out = mat_scalar_fn(a_tst.as_ref(), &scalar_fn);
+        mat_mat_approx_eq(expected.as_ref(), out.as_ref(), 1e-12);
     }
 
     #[test]

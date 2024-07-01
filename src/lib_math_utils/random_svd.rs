@@ -50,9 +50,9 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
             o_mat_res.as_ref(), T::from(1.0).unwrap(),
             8);
         // apply norm
-        // y_mat = y_mat.as_ref() * faer::scale(
-        //    T::from(1.).unwrap() / y_mat.norm_l2()
-        //    );
+        y_mat = y_mat.as_ref() * faer::scale(
+           T::from(1.).unwrap() / y_mat.norm_l2()
+           );
     }
     let my_q = y_mat.qr().compute_thin_q();
     my_q
