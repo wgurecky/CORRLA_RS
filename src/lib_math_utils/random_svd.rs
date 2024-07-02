@@ -175,8 +175,23 @@ mod rsvd_unit_tests {
 
         // convert singular values into diagonal matrix
         let sr_mat = mat_colvec_to_diag(sr.as_ref());
+        assert!(sr_mat.nrows() == svd_rank);
+        assert!(sr_mat.nrows() == svd_rank);
 
         // check singular values against knowns
         mat_mat_approx_eq(sr_mat.as_ref(), expected_s.as_ref(), 1e-3);
+
+        // truncated svd
+        let lr_expected_s = faer::mat![
+            [3.0, 0.0,       0.0],
+            [0.0, 2.2360679, 0.0],
+            [0.0, 0.0,       2.0],
+        ];
+        let lr_svd_rank = 3;
+        let (_lr_ur, lr_sr, _lr_vr) = random_svd(test_a.as_ref(), lr_svd_rank, n_iter, n_oversamples);
+        let lr_sr_mat = mat_colvec_to_diag(lr_sr.as_ref());
+        assert!(lr_sr_mat.nrows() == lr_svd_rank);
+        assert!(lr_sr_mat.nrows() == lr_svd_rank);
+        mat_mat_approx_eq(lr_sr_mat.as_ref(), lr_expected_s.as_ref(), 1e-3);
     }
 }
