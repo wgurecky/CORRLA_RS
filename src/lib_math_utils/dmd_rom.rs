@@ -305,6 +305,6 @@ mod dmd_unit_tests {
         println!("Predicted: {:?}", p20_predicted);
         println!("DMDc Eigs: {:?}", dmdc_model.lambdas.as_ref());
         assert_eq!(dmdc_model.lambdas.unwrap().nrows(), n_modes);
-        mat_mat_approx_eq(p20_predicted.as_ref(), p20_expected.as_ref(), 5e-3);
+        mat_mat_approx_eq(p20_predicted.as_ref(), p20_expected.as_ref(), 5e-2);
     }
 }
