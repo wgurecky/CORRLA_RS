@@ -271,8 +271,9 @@ mod dmd_unit_tests {
         println!("u_data shape: {:?}, {:?}", u_mat.nrows(), u_mat.ncols());
 
         // build DMDc model
-        let n_modes = 12;
-        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, 30);
+        let n_modes = 14;
+        let n_iters = 40;
+        let dmdc_model = DMDc::new(p_snapshots.as_ref(), u_mat.as_ref(), 1.0, n_modes, n_iters);
 
         // test the DMDc model
         let estimated_a_op = dmdc_model.est_a_til();
