@@ -50,9 +50,9 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
             o_mat_res.as_ref(), T::from(1.0).unwrap(),
             8);
         // apply norm
-        // y_mat = y_mat.as_ref() * faer::scale(
-        //    T::from(1.).unwrap() / y_mat.norm_l2()
-        //    );
+        y_mat = y_mat.as_ref() * faer::scale(
+           T::from(1.).unwrap() / y_mat.norm_l2()
+           );
     }
     let my_q = y_mat.qr().compute_thin_q();
     my_q
@@ -117,32 +117,81 @@ mod rsvd_unit_tests {
     use std::time::SystemTime;
 
     #[test]
-    fn test_rsvd_f64() {
-    // set global parallelism
-    faer::set_global_parallelism(faer::Parallelism::Rayon(8));
+    fn test_rsvd_shape() {
+        // set global parallelism
+        faer::set_global_parallelism(faer::Parallelism::Rayon(8));
 
-    // create random matrix
-    let sys_timer = SystemTime::now();
-    let ti = sys_timer.elapsed().unwrap();
-    print!("running rng... \n", );
-    let test_a: Mat<f64> = Mat::from_fn(
-        10000, 100,
-        |_i, _j| { thread_rng().sample(StandardNormal) } );
-    let tf = sys_timer.elapsed().unwrap();
-    print!("done rng...{:?} s \n", (tf - ti).as_secs_f64());
+        // create random matrix
+        let sys_timer = SystemTime::now();
+        let ti = sys_timer.elapsed().unwrap();
+        print!("running rng... \n", );
+        let test_a: Mat<f64> = Mat::from_fn(
+            10000, 100,
+            |_i, _j| { thread_rng().sample(StandardNormal) } );
+        let tf = sys_timer.elapsed().unwrap();
+        print!("done rng...{:?} s \n", (tf - ti).as_secs_f64());
 
-    // print!("sigular values: {:?}", test_a);
-    let (_ur, sr, _vr) = random_svd(test_a.as_ref(), 4, 8, 10);
-    let tf2 = sys_timer.elapsed().unwrap();
-    print!("done rsvd...{:?} s \n", (tf2 - tf).as_secs_f64());
-    print!("sigular values: {:?}", sr);
-    // print!("sigular vec: {:?}", ur);
-    //
-    let test_b = random_mat_uniform(5, 4, 0., 1.);
-    print!("test b: {:?}", test_b);
-    let mean_b = mat_mean(test_b.as_ref(), 1);
-    print!("mean b: {:?}", mean_b);
-    let centered_b = center_mat_col(test_b.as_ref());
-    print!("Centered b: {:?}", centered_b);
+        // print!("sigular values: {:?}", test_a);
+        let svd_rank = 4;
+        let n_iter = 12;
+        let n_oversamples = 10;
+        let (ur, sr, vr) = random_svd(test_a.as_ref(), svd_rank, n_iter, n_oversamples);
+        let tf2 = sys_timer.elapsed().unwrap();
+        print!("done rsvd...{:?} s \n", (tf2 - tf).as_secs_f64());
+        print!("sigular values: {:?}", sr);
+
+        // convert singular values into diagonal matrix
+        let sr_mat = mat_colvec_to_diag(sr.as_ref());
+        // test reconstructed matrix, A = U S V^T
+        let approx_a = ur.as_ref() * sr_mat.as_ref() * vr.as_ref();
+
+        // check shape of the reconstructed matrix is correct
+        assert!(approx_a.nrows() == test_a.nrows());
+        assert!(approx_a.ncols() == test_a.ncols());
+    }
+
+    #[test]
+    fn test_rsvd_lowrank() {
+        let test_a = faer::mat![
+            [1.0, 0.0, 0.0, 0.0, 2.0],
+            [0.0, 0.0, 3.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0, 0.0],
+        ];
+        let expected_s = faer::mat![
+            [3.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 2.2360679, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ];
+
+        let svd_rank = 5;
+        let n_iter = 12;
+        let n_oversamples = 10;
+        let (_ur, sr, _vr) = random_svd(test_a.as_ref(), svd_rank, n_iter, n_oversamples);
+        print!("sigular values: {:?}", sr);
+
+        // convert singular values into diagonal matrix
+        let sr_mat = mat_colvec_to_diag(sr.as_ref());
+        assert!(sr_mat.nrows() == svd_rank);
+        assert!(sr_mat.nrows() == svd_rank);
+
+        // check singular values against knowns
+        mat_mat_approx_eq(sr_mat.as_ref(), expected_s.as_ref(), 1e-3);
+
+        // truncated svd
+        let lr_expected_s = faer::mat![
+            [3.0, 0.0,       0.0],
+            [0.0, 2.2360679, 0.0],
+            [0.0, 0.0,       2.0],
+        ];
+        let lr_svd_rank = 3;
+        let (_lr_ur, lr_sr, _lr_vr) = random_svd(test_a.as_ref(), lr_svd_rank, n_iter, n_oversamples);
+        let lr_sr_mat = mat_colvec_to_diag(lr_sr.as_ref());
+        assert!(lr_sr_mat.nrows() == lr_svd_rank);
+        assert!(lr_sr_mat.nrows() == lr_svd_rank);
+        mat_mat_approx_eq(lr_sr_mat.as_ref(), lr_expected_s.as_ref(), 1e-3);
     }
 }
