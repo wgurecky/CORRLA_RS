@@ -12,20 +12,20 @@ path = 'src/lib.rs'
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-assert_approx_eq = "*"
-itertools = "*"
+assert_approx_eq = "1.1.0"
+itertools = "0.13.0"
 rand = {version=">=0.8.5", featurs=["alloc"]}
-statrs = "*"
+statrs = "0.17.1"
 argmin = {version="0.10.0"}
-argmin-math = "*"
+argmin-math = "0.4.0"
 finitediff = {version="0.1.4", features = ["ndarray"]}
-rand_distr = "*"
-num-traits = "*"
-num-complex = "*"
+rand_distr = "0.4.3"
+num-traits = "0.2.19"
+num-complex = "0.4"
 ndarray = {version=">=0.15.6", features=["rayon"]}
-faer = {version = "0.19.1"}
-faer-ext = {version="*", features=["ndarray"]}
-rayon = "*"
+faer = {version = "0.19.2"}
+faer-ext = {version="0.2.0", features=["ndarray"]}
+rayon = "1.10.0"
 pyo3 = {version = "0.21.2", features = ["extension-module"]}
 numpy = "0.21"
 kdtree = "0.7.0"
