@@ -2,6 +2,8 @@
 use std::cmp;
 use faer::{prelude::*};
 use faer::{mat, Mat, MatRef, MatMut};
+use faer::dyn_stack::PodStack;
+use faer::linop::LinOp;
 use rand::{prelude::*};
 use rand_distr::{StandardNormal, Uniform};
 use num_traits::Float;
@@ -12,7 +14,7 @@ use crate::lib_math_utils::mat_utils::*;
 /// From algorithm 9 in P. Martinsson, J. Tropp.
 /// Randomized Numerical Linear Algebra:
 /// Foundations & Algorithms.  arxiv.org/pdf/2002.01387.pdf
-pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
+pub fn power_iter<T, Lop: LinOp<T>>(a_mat: &Lop, omega_rank: usize, n_iter: usize)
     -> Mat<T>
     where
     T: faer::RealField + Float
@@ -25,10 +27,19 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     let o_ncols = omega.ncols();
     let o_nrows = omega.nrows();
 
+    // unused in faer LinOp apply() method
+    let mut _dummy_podstack: [u8;1] = [0u8;1];
+
     // initial guess for y_mat is product A*omega
     // a_mat is nxm, with n >> m. omega is mxk
     // y_mat is nxk
-    let mut y_mat = a_mat * omega;
+    let mut y_mat = faer::Mat::zeros(a_mat.nrows(), o_ncols);
+    a_mat.apply(
+        y_mat.as_mut(),
+        omega.as_ref(),
+        faer::get_global_parallelism(),
+        PodStack::new(&mut _dummy_podstack)
+        );
 
     // storage for matmul results
     let mut o_mat_res: Mat<T> = Mat::zeros(o_nrows, o_ncols);
@@ -39,16 +50,18 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
         }
         // y_mat = a_mat * (a_mat.transpose() * &y_mat);
         // parallel impl of above
-        par_matmul_helper(
+        a_mat.conj_apply(
             o_mat_res.as_mut(),
-            a_mat.transpose().as_ref(),
-            y_mat.as_ref(), T::from(1.0).unwrap(),
-            8);
-        par_matmul_helper(
+            y_mat.as_ref(),
+            faer::get_global_parallelism(),
+            PodStack::new(&mut _dummy_podstack)
+        );
+        a_mat.apply(
             y_mat.as_mut(),
-            a_mat.as_ref(),
-            o_mat_res.as_ref(), T::from(1.0).unwrap(),
-            8);
+            o_mat_res.as_ref(),
+            faer::get_global_parallelism(),
+            PodStack::new(&mut _dummy_podstack)
+        );
         // apply norm
         y_mat = y_mat.as_ref() * faer::scale(
            T::from(1.).unwrap() / y_mat.norm_l2()
@@ -56,6 +69,84 @@ pub fn power_iter<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize)
     }
     let my_q = y_mat.qr().compute_thin_q();
     my_q
+}
+
+#[derive(Debug)]
+struct TrLinOpWrapper<'a, T>
+    where
+    T: faer::RealField + Float
+{
+    transpose_flag: bool,
+    inner_mat: MatRef<'a, T>,
+}
+
+impl <'a, T> TrLinOpWrapper<'a, T>
+    where
+    T: faer::RealField + Float
+{
+    pub fn new(transpose_flag: bool, lop_ref: MatRef<'a, T>) -> Self {
+        Self {
+            transpose_flag: transpose_flag,
+            inner_mat: lop_ref,
+        }
+    }
+}
+
+impl <'a, T> LinOp<T> for TrLinOpWrapper<'a, T>
+    where
+    T: faer::RealField + Float
+{
+    fn apply_req(
+            &self,
+            rhs_ncols: usize,
+            parallelism: faer::Parallelism,
+        ) -> Result<faer::dyn_stack::StackReq, faer::dyn_stack::SizeOverflow> {
+        Ok(faer::dyn_stack::StackReq::empty())
+}
+
+    fn nrows(&self) -> usize {
+        if self.transpose_flag == true {
+            self.inner_mat.ncols()
+        } else {
+            self.inner_mat.nrows()
+        }
+    }
+
+    fn ncols(&self) -> usize {
+        if self.transpose_flag == true {
+            self.inner_mat.nrows()
+        } else {
+            self.inner_mat.ncols()
+        }
+    }
+
+    fn conj_apply(
+            &self,
+            out: MatMut<'_, T>,
+            rhs: MatRef<'_, T>,
+            parallelism: faer::Parallelism,
+            stack: faer::dyn_stack::PodStack<'_>,
+        ) {
+        if self.transpose_flag == true {
+            self.inner_mat.apply(out, rhs, parallelism, stack);
+        } else {
+            self.inner_mat.conj_apply(out, rhs, parallelism, stack);
+        }
+    }
+
+    fn apply(
+            &self,
+            out: MatMut<'_, T>,
+            rhs: MatRef<'_, T>,
+            parallelism: faer::Parallelism,
+            stack: faer::dyn_stack::PodStack<'_>,
+        ) {
+        if self.transpose_flag == true {
+            self.inner_mat.conj_apply(out, rhs, parallelism, stack);
+        } else {
+            self.inner_mat.apply(out, rhs, parallelism, stack);
+        }
+    }
 }
 
 
@@ -66,24 +157,29 @@ pub fn random_svd<T>(a_mat: MatRef<T>, omega_rank: usize, n_iter: usize, n_overs
     T: faer::RealField + Float
 {
     // if matrix is fat, make thin
-    let mut aa_mat = a_mat;
+    // let mut aa_mat = a_mat;
+
     let mut fat: bool = false;
+    let mut fat_transpose: bool = false;
     if a_mat.nrows() < a_mat.ncols() {
         fat = true;
-        aa_mat = a_mat.transpose();
+        fat_transpose = true;
     }
+    let aa_linop = TrLinOpWrapper::new(fat_transpose, a_mat);
+
+    let lim_omega_rank = cmp::min(omega_rank+n_oversamples, aa_linop.ncols());
+
     // get random projection of a_mat onto my_q
-    let my_q_mat = power_iter(
-        aa_mat, cmp::min(omega_rank+n_oversamples, aa_mat.ncols()), n_iter);
-    // q_mat is nxk, q_mat.T is kxn  , aa_mat is nxm
+    let my_q_mat = power_iter(&aa_linop, lim_omega_rank, n_iter);
+
+    // q_mat is nxk, q_mat.T is kxn  , aa_linop is nxm
     // b mat is kxm
-    let my_b_mat = my_q_mat.transpose() * aa_mat;
-    // let mut my_b_mat = faer::Mat::zeros(my_q_mat.ncols(), aa_mat.ncols());
-    // par_matmul_helper(
-    //     my_b_mat.as_mut(),
-    //     my_q_mat.transpose().as_ref(),
-    //     aa_mat.as_ref(),
-    //     T::from(1.0).unwrap(), 8);
+    let my_b_mat = match fat
+    {
+        // TODO: implement left multiply for linop
+        true => my_q_mat.transpose() * a_mat.transpose(),
+        _ => my_q_mat.transpose() * a_mat
+    };
 
     // compute svd of reduced B matrix
     let my_rsvd = my_b_mat.svd();

@@ -23,7 +23,7 @@ rand_distr = "*"
 num-traits = "*"
 num-complex = "*"
 ndarray = {version=">=0.15.6", features=["rayon"]}
-faer = {version = "0.19.1"}
+faer = {version = "0.19.2", features=["unstable"]}
 faer-ext = {version="*", features=["ndarray"]}
 rayon = "*"
 pyo3 = {version = "0.21.2", features = ["extension-module"]}
