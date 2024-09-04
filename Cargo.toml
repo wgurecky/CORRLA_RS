@@ -22,11 +22,11 @@ finitediff = {version="0.1.4", features = ["ndarray"]}
 rand_distr = "0.4.3"
 num-traits = "0.2.19"
 num-complex = "0.4"
-ndarray = {version=">=0.15.6", features=["rayon"]}
+ndarray = {version="0.15", features=["rayon"]}
 faer = {version = "0.19.2"}
 faer-ext = {version="0.2.0", features=["ndarray"]}
 rayon = "1.10.0"
-pyo3 = {version = "0.21.2", features = ["extension-module"]}
+pyo3 = {version="0.21.2", features = ["extension-module"]}
 numpy = "0.21"
 kdtree = "0.7.0"
 # nalgebra = "*"
